@@ -6,7 +6,6 @@ import type { TextureFace } from "./texture-types";
 import type { BlockId } from "./types";
 
 const TEXTURE_FACES: TextureFace[] = ["side", "top", "bottom"];
-const BOX_FACE_ORDER: TextureFace[] = ["side", "side", "top", "bottom", "side", "side"];
 
 export interface TextureAtlasLayout {
   tileSize: number;
@@ -17,7 +16,7 @@ export interface TextureAtlasLayout {
   tileCount: number;
 }
 
-interface AtlasTile {
+export interface AtlasUv {
   u: number;
   v: number;
   width: number;
@@ -30,14 +29,10 @@ export class BlockTextureAtlas {
   public readonly layout: TextureAtlasLayout;
   public readonly texture: THREE.CanvasTexture;
 
-  private readonly tiles = new Map<string, AtlasTile>();
-  private readonly geometries = new Map<BlockId, THREE.BufferGeometry>();
+  private readonly tiles = new Map<string, AtlasUv>();
   private readonly materials = new Map<BlockId, THREE.MeshStandardMaterial>();
 
-  public constructor(
-    private readonly sourceGeometry: THREE.BoxGeometry,
-    registry: BlockRegistry = DEFAULT_BLOCK_REGISTRY,
-  ) {
+  public constructor(registry: BlockRegistry = DEFAULT_BLOCK_REGISTRY) {
     const blockDefinitions = registry.ids.map((id) => registry.get(id));
     const tileCount = blockDefinitions.length * TEXTURE_FACES.length;
     const columns = Math.ceil(Math.sqrt(tileCount));
@@ -83,17 +78,8 @@ export class BlockTextureAtlas {
     this.texture.needsUpdate = true;
 
     for (const definition of blockDefinitions) {
-      this.geometries.set(definition.id, this.createGeometry(definition.id));
       this.materials.set(definition.id, this.createMaterial(definition));
     }
-  }
-
-  public getGeometry(id: BlockId): THREE.BufferGeometry {
-    const geometry = this.geometries.get(id);
-    if (!geometry) {
-      throw new Error(`No atlas geometry found for block: ${id}`);
-    }
-    return geometry;
   }
 
   public getMaterial(id: BlockId): THREE.MeshStandardMaterial {
@@ -104,40 +90,19 @@ export class BlockTextureAtlas {
     return material;
   }
 
-  public dispose(): void {
-    for (const geometry of this.geometries.values()) {
-      geometry.dispose();
+  public getFaceUv(id: BlockId, face: TextureFace): AtlasUv {
+    const tile = this.tiles.get(tileKey(id, face));
+    if (!tile) {
+      throw new Error(`No atlas tile found for ${id} ${face} face`);
     }
+    return tile;
+  }
+
+  public dispose(): void {
     for (const material of this.materials.values()) {
       material.dispose();
     }
     this.texture.dispose();
-  }
-
-  private createGeometry(id: BlockId): THREE.BufferGeometry {
-    const geometry = this.sourceGeometry.clone();
-    geometry.clearGroups();
-    const uv = geometry.getAttribute("uv");
-    if (!(uv instanceof THREE.BufferAttribute) || uv.count < BOX_FACE_ORDER.length * 4) {
-      throw new Error("Block atlas UV mapping requires a standard BoxGeometry");
-    }
-
-    for (let faceIndex = 0; faceIndex < BOX_FACE_ORDER.length; faceIndex += 1) {
-      const face = BOX_FACE_ORDER[faceIndex];
-      const tile = this.tiles.get(tileKey(id, face));
-      if (!tile) {
-        throw new Error(`No atlas tile found for ${id} ${face} face`);
-      }
-
-      for (let vertexIndex = 0; vertexIndex < 4; vertexIndex += 1) {
-        const attributeIndex = faceIndex * 4 + vertexIndex;
-        const localU = uv.getX(attributeIndex);
-        const localV = uv.getY(attributeIndex);
-        uv.setXY(attributeIndex, tile.u + localU * tile.width, tile.v + localV * tile.height);
-      }
-    }
-    uv.needsUpdate = true;
-    return geometry;
   }
 
   private createMaterial(definition: BlockDefinition): THREE.MeshStandardMaterial {

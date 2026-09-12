@@ -1,6 +1,70 @@
 import type { TextureRecipe } from "./texture-types";
 import type { BlockId } from "./types";
 
+export const BLOCK_TYPE = {
+  AIR: 0,
+  GRASS: 1,
+  DIRT: 2,
+  STONE: 3,
+  COBBLESTONE: 4,
+  SAND: 5,
+  OAK_LOG: 6,
+  OAK_PLANKS: 7,
+  LEAVES: 8,
+  GLASS: 9,
+  BRICKS: 10,
+  SNOW: 11,
+  NETHERRACK: 12,
+  OBSIDIAN: 13,
+  COAL_ORE: 14,
+  IRON_ORE: 15,
+  MOSSY_COBBLESTONE: 16,
+  CRYSTAL: 17,
+} as const;
+
+export type BlockType = (typeof BLOCK_TYPE)[keyof typeof BLOCK_TYPE];
+
+export const BLOCK_ID_TO_TYPE: Readonly<Record<BlockId, BlockType>> = {
+  grass: BLOCK_TYPE.GRASS,
+  dirt: BLOCK_TYPE.DIRT,
+  stone: BLOCK_TYPE.STONE,
+  cobblestone: BLOCK_TYPE.COBBLESTONE,
+  sand: BLOCK_TYPE.SAND,
+  oak_log: BLOCK_TYPE.OAK_LOG,
+  oak_planks: BLOCK_TYPE.OAK_PLANKS,
+  leaves: BLOCK_TYPE.LEAVES,
+  glass: BLOCK_TYPE.GLASS,
+  bricks: BLOCK_TYPE.BRICKS,
+  snow: BLOCK_TYPE.SNOW,
+  netherrack: BLOCK_TYPE.NETHERRACK,
+  obsidian: BLOCK_TYPE.OBSIDIAN,
+  coal_ore: BLOCK_TYPE.COAL_ORE,
+  iron_ore: BLOCK_TYPE.IRON_ORE,
+  mossy_cobblestone: BLOCK_TYPE.MOSSY_COBBLESTONE,
+  crystal: BLOCK_TYPE.CRYSTAL,
+};
+
+export const BLOCK_TYPE_TO_ID: readonly (BlockId | null)[] = [
+  null,
+  "grass",
+  "dirt",
+  "stone",
+  "cobblestone",
+  "sand",
+  "oak_log",
+  "oak_planks",
+  "leaves",
+  "glass",
+  "bricks",
+  "snow",
+  "netherrack",
+  "obsidian",
+  "coal_ore",
+  "iron_ore",
+  "mossy_cobblestone",
+  "crystal",
+];
+
 export interface BlockDefinition {
   id: BlockId;
   label: string;
