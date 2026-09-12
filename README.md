@@ -24,6 +24,10 @@ npm run test:saves
 
 `bench:voxel-format` round-trips every codec and compares NSVF against `node:zlib` gzip on representative terrain, edits, caves, and noise. `test:saves` drives the `SaveSystem` and per-save `WorldPersistence` on an in-memory driver to verify multiple worlds, multiple save slots, duplication, deletion, round-tripping, fingerprint invalidation, and clearing.
 
+## Deploy
+
+Pushes to `main` build and publish the game to GitHub Pages through `.github/workflows/deploy.yml`, served from `https://nomio-studio.github.io/nomio/`. The workflow runs `npm ci` and `npm run build`, uploads `dist`, and deploys it with the Pages Actions. `vite.config.ts` sets the `/nomio/` base path from `GITHUB_REPOSITORY` during an Actions build, so the local dev server keeps serving from `/`.
+
 ## Controls
 
 - `WASD` or arrow keys: move
