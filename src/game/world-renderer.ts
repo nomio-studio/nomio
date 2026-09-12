@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { BLOCK_DEFINITIONS } from "./blocks";
-import type { BlockTarget, VoxelPosition } from "./types";
+import { type BlockMaterialSet, ProceduralTextureFactory } from "./procedural-textures";
+import type { BlockId, BlockTarget, VoxelPosition } from "./types";
 import type { VoxelWorld } from "./world";
 
 interface BlockMeshData {
@@ -11,7 +12,8 @@ export class VoxelWorldRenderer {
   private readonly group = new THREE.Group();
   private readonly blockGeometry = new THREE.BoxGeometry(1, 1, 1);
   private readonly highlight: THREE.LineSegments;
-  private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
+  private readonly textureFactory = new ProceduralTextureFactory();
+  private readonly materialSets = new Map<BlockId, BlockMaterialSet>();
 
   public constructor(
     private readonly scene: THREE.Scene,
@@ -21,15 +23,7 @@ export class VoxelWorldRenderer {
     this.scene.add(this.group);
 
     for (const definition of Object.values(BLOCK_DEFINITIONS)) {
-      this.materials.set(
-        definition.id,
-        new THREE.MeshStandardMaterial({
-          color: definition.color,
-          roughness: 0.82,
-          metalness: 0.02,
-          flatShading: true,
-        }),
-      );
+      this.materialSets.set(definition.id, this.textureFactory.createMaterialSet(definition));
     }
 
     const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xf27b63, transparent: true });
@@ -49,12 +43,12 @@ export class VoxelWorldRenderer {
     this.group.clear();
 
     this.world.forEach((cell) => {
-      const material = this.materials.get(cell.id);
-      if (!material) {
+      const materialSet = this.materialSets.get(cell.id);
+      if (!materialSet) {
         return;
       }
 
-      const mesh = new THREE.Mesh(this.blockGeometry, material);
+      const mesh = new THREE.Mesh(this.blockGeometry, materialSet.materials);
       mesh.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -103,8 +97,8 @@ export class VoxelWorldRenderer {
     this.blockGeometry.dispose();
     this.highlight.geometry.dispose();
     (this.highlight.material as THREE.Material).dispose();
-    for (const material of this.materials.values()) {
-      material.dispose();
+    for (const materialSet of this.materialSets.values()) {
+      this.textureFactory.disposeMaterialSet(materialSet);
     }
     this.scene.remove(this.group, this.highlight);
   }

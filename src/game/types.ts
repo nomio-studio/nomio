@@ -1,6 +1,23 @@
 import type * as THREE from "three";
 
-export type BlockId = "grass" | "stone" | "crystal";
+export type BlockId =
+  | "grass"
+  | "dirt"
+  | "stone"
+  | "cobblestone"
+  | "sand"
+  | "oak_log"
+  | "oak_planks"
+  | "leaves"
+  | "glass"
+  | "bricks"
+  | "snow"
+  | "netherrack"
+  | "obsidian"
+  | "coal_ore"
+  | "iron_ore"
+  | "mossy_cobblestone"
+  | "crystal";
 
 export interface VoxelPosition {
   x: number;

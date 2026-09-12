@@ -1,6 +1,22 @@
 import { BLOCK_DEFINITIONS, BLOCK_ORDER } from "../game/blocks";
 import type { BlockId } from "../game/types";
 
+const keyLabel = (index: number): string => {
+  if (index < 9) {
+    return String(index + 1);
+  }
+  if (index === 9) {
+    return "0";
+  }
+  if (index === 10) {
+    return "−";
+  }
+  if (index === 11) {
+    return "=";
+  }
+  return String(index + 1);
+};
+
 export interface HudOptions {
   onSelectBlock: (id: BlockId) => void;
   onReset: () => void;
@@ -55,6 +71,7 @@ export class Hud {
           <span class="eyebrow">FIELD KIT</span>
           <p><kbd>WASD</kbd> move <kbd>SPACE</kbd> hop</p>
           <p><kbd>LMB</kbd> mine <kbd>RMB</kbd> place</p>
+          <p><kbd>1–0</kbd> choose <kbd>[ ]</kbd> cycle</p>
           <button class="text-button" id="reset-world" type="button">Reset island <span>↺</span></button>
         </aside>
 
@@ -63,15 +80,15 @@ export class Hud {
           <div class="hotbar-items">
             ${BLOCK_ORDER.map(
               (id, index) => `
-                <button class="block-slot${index === 0 ? " is-selected" : ""}" type="button" data-block="${id}" aria-label="Select ${BLOCK_DEFINITIONS[id].label}" aria-pressed="${index === 0}">
-                  <span class="slot-number">0${index + 1}</span>
+                <button class="block-slot${index === 0 ? " is-selected" : ""}" type="button" data-block="${id}" aria-label="Select ${BLOCK_DEFINITIONS[id].label}" aria-pressed="${index === 0}" title="${BLOCK_DEFINITIONS[id].label} · ${BLOCK_DEFINITIONS[id].description}">
+                  <span class="slot-number">${keyLabel(index)}</span>
                   <span class="swatch" style="--swatch: ${BLOCK_DEFINITIONS[id].accent}"></span>
                   <span class="slot-label">${BLOCK_DEFINITIONS[id].label}</span>
                 </button>
               `,
             ).join("")}
           </div>
-          <p class="selection-label" id="selection-label">Lichen · soft ground</p>
+          <p class="selection-label" id="selection-label">Grass · soft ground</p>
         </nav>
 
         <div class="mobile-actions" aria-label="Touch actions">

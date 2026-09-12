@@ -64,22 +64,26 @@ const worldRenderer = new VoxelWorldRenderer(scene, world);
 const player = new PlayerController(camera, world);
 
 let selectedBlock: BlockId = BLOCK_ORDER[0];
+let selectedIndex = 0;
+const selectBlockByIndex = (index: number): void => {
+  const id = BLOCK_ORDER[index];
+  if (!id) {
+    return;
+  }
+  selectedIndex = index;
+  selectedBlock = id;
+  hud.selectBlock(id);
+};
+
 const input = new InputManager(canvas, {
-  onBlockHotkey: (slot) => {
-    const id = BLOCK_ORDER[slot];
-    if (id) {
-      selectedBlock = id;
-      hud.selectBlock(id);
-    }
-  },
+  onBlockHotkey: (slot) => selectBlockByIndex(slot),
+  onCycleBlock: (direction) =>
+    selectBlockByIndex((selectedIndex + direction + BLOCK_ORDER.length) % BLOCK_ORDER.length),
   onPointerLockChange: (locked) => hud.setPointerLocked(locked),
 });
 
 const hud = new Hud(ui, {
-  onSelectBlock: (id) => {
-    selectedBlock = id;
-    hud.selectBlock(id);
-  },
+  onSelectBlock: (id) => selectBlockByIndex(BLOCK_ORDER.indexOf(id)),
   onReset: () => {
     resetWorld();
   },

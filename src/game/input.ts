@@ -11,6 +11,7 @@ export interface InputState {
 
 export interface InputOptions {
   onBlockHotkey?: (slot: number) => void;
+  onCycleBlock?: (direction: -1 | 1) => void;
   onPointerLockChange?: (locked: boolean) => void;
 }
 
@@ -103,9 +104,27 @@ export class InputManager {
       this.jump = true;
     }
 
-    const slot = Number(event.key);
-    if (slot >= 1 && slot <= 3) {
-      this.options.onBlockHotkey?.(slot - 1);
+    const hotkeySlots: Record<string, number> = {
+      Digit1: 0,
+      Digit2: 1,
+      Digit3: 2,
+      Digit4: 3,
+      Digit5: 4,
+      Digit6: 5,
+      Digit7: 6,
+      Digit8: 7,
+      Digit9: 8,
+      Digit0: 9,
+      Minus: 10,
+      Equal: 11,
+    };
+    const slot = hotkeySlots[event.code];
+    if (slot !== undefined) {
+      this.options.onBlockHotkey?.(slot);
+    } else if (event.code === "BracketLeft") {
+      this.options.onCycleBlock?.(-1);
+    } else if (event.code === "BracketRight") {
+      this.options.onCycleBlock?.(1);
     }
   };
 

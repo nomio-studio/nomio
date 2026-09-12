@@ -289,7 +289,7 @@ button:focus-visible {
 
 .controls-card {
   right: 32px;
-  bottom: 138px;
+  bottom: 30px;
   min-width: 174px;
   padding: 13px 14px 12px;
   border-top: 1px solid rgb(243 238 228 / 28%);
@@ -333,7 +333,7 @@ kbd {
 .hotbar {
   bottom: 28px;
   left: 50%;
-  width: min(420px, calc(100vw - 64px));
+  width: min(720px, calc(100vw - 360px));
   transform: translateX(-50%);
 }
 
@@ -345,17 +345,17 @@ kbd {
 
 .hotbar-items {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 5px;
 }
 
 .block-slot {
   display: grid;
-  grid-template-columns: 20px 20px 1fr;
+  grid-template-columns: 15px 17px 1fr;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   min-width: 0;
-  padding: 8px 8px 8px 7px;
+  padding: 7px 7px 7px 6px;
   border: 1px solid rgb(243 238 228 / 18%);
   background: rgb(16 24 32 / 57%);
   color: rgb(243 238 228 / 68%);
@@ -377,13 +377,13 @@ kbd {
 .slot-number {
   color: rgb(243 238 228 / 40%);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 9px;
+  font-size: 8px;
 }
 
 .swatch {
   display: block;
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
   background: var(--swatch);
   box-shadow: inset -3px -3px rgb(16 24 32 / 22%);
 }
@@ -418,6 +418,16 @@ kbd {
 .mobile-actions,
 .touch-pad {
   display: none;
+}
+
+@media (max-width: 1000px) {
+  .controls-card {
+    display: none;
+  }
+
+  .hotbar {
+    width: min(720px, calc(100vw - 64px));
+  }
 }
 
 @media (max-width: 700px) {
@@ -456,6 +466,10 @@ kbd {
   .hotbar {
     bottom: 18px;
     width: calc(100vw - 36px);
+  }
+
+  .hotbar-items {
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .slot-label {
