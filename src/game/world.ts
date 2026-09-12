@@ -1,14 +1,24 @@
-import * as THREE from "three";
 import type { Aabb, BlockCell, BlockId, VoxelPosition } from "./types";
-import { voxelKey } from "./types";
+import { parseVoxelKey, voxelKey } from "./types";
 
 export class VoxelWorld {
   private readonly blocks = new Map<string, BlockId>();
 
-  public constructor(cells: BlockCell[] = []) {
+  public constructor(cells: Iterable<BlockCell> = []) {
+    this.replace(cells);
+  }
+
+  public replace(cells: Iterable<BlockCell>): void {
+    this.blocks.clear();
     for (const cell of cells) {
       this.set(cell, cell.id);
     }
+  }
+
+  public toArray(): BlockCell[] {
+    const cells: BlockCell[] = [];
+    this.forEach((cell) => cells.push(cell));
+    return cells;
   }
 
   public get(position: VoxelPosition): BlockId | null {
@@ -32,8 +42,7 @@ export class VoxelWorld {
 
   public forEach(callback: (cell: BlockCell) => void): void {
     for (const [key, id] of this.blocks) {
-      const [x, y, z] = key.split(",").map(Number);
-      callback({ x, y, z, id });
+      callback({ ...parseVoxelKey(key), id });
     }
   }
 
@@ -67,13 +76,5 @@ export class VoxelWorld {
     }
 
     return true;
-  }
-
-  public static playerBounds(position: THREE.Vector3): Aabb {
-    const halfWidth = 0.3;
-    return {
-      min: new THREE.Vector3(position.x - halfWidth, position.y, position.z - halfWidth),
-      max: new THREE.Vector3(position.x + halfWidth, position.y + 1.8, position.z + halfWidth),
-    };
   }
 }

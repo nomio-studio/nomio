@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { BLOCK_DEFINITIONS, type BlockDefinition } from "./blocks";
+import { DEFAULT_BLOCK_REGISTRY, type BlockRegistry } from "./block-registry";
+import type { BlockDefinition } from "./blocks";
 import { createProceduralTileCanvas, TEXTURE_SIZE } from "./procedural-textures";
 import type { TextureFace } from "./texture-types";
 import type { BlockId } from "./types";
@@ -35,9 +36,9 @@ export class BlockTextureAtlas {
 
   public constructor(
     private readonly sourceGeometry: THREE.BoxGeometry,
-    definitions: Readonly<Record<BlockId, BlockDefinition>> = BLOCK_DEFINITIONS,
+    registry: BlockRegistry = DEFAULT_BLOCK_REGISTRY,
   ) {
-    const blockDefinitions = Object.values(definitions);
+    const blockDefinitions = registry.ids.map((id) => registry.get(id));
     const tileCount = blockDefinitions.length * TEXTURE_FACES.length;
     const columns = Math.ceil(Math.sqrt(tileCount));
     const rows = Math.ceil(tileCount / columns);

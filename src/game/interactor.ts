@@ -1,11 +1,12 @@
 import * as THREE from "three";
-import type { BlockId, BlockTarget, VoxelPosition } from "./types";
+import type { Aabb, BlockId, BlockTarget, VoxelPosition } from "./types";
 import { offsetVoxel } from "./types";
 import type { VoxelWorld } from "./world";
 import type { VoxelWorldRenderer } from "./world-renderer";
 
 export interface InteractorOptions {
-  getPlayerBounds: () => { min: THREE.Vector3; max: THREE.Vector3 };
+  getPlayerBounds: () => Aabb;
+  maxDistance: number;
   onWorldChanged?: () => void;
 }
 
@@ -20,7 +21,7 @@ export class VoxelInteractor {
     private readonly renderer: VoxelWorldRenderer,
     private readonly options: InteractorOptions,
   ) {
-    this.raycaster.far = 7;
+    this.raycaster.far = options.maxDistance;
   }
 
   public update(): void {

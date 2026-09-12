@@ -15,9 +15,25 @@ export interface InputOptions {
   onPointerLockChange?: (locked: boolean) => void;
 }
 
-type MoveDirection = "forward" | "back" | "left" | "right";
+export type MoveDirection = "forward" | "back" | "left" | "right";
+
+const BLOCK_HOTKEY_SLOTS: Readonly<Record<string, number>> = {
+  Digit1: 0,
+  Digit2: 1,
+  Digit3: 2,
+  Digit4: 3,
+  Digit5: 4,
+  Digit6: 5,
+  Digit7: 6,
+  Digit8: 7,
+  Digit9: 8,
+  Digit0: 9,
+  Minus: 10,
+  Equal: 11,
+};
 
 export class InputManager {
+  private readonly listeners = new AbortController();
   private readonly keys = new Set<string>();
   private readonly virtualMoves = new Set<MoveDirection>();
   private readonly actions: GameAction[] = [];
@@ -44,6 +60,15 @@ export class InputManager {
 
   public queueAction(action: GameAction): void {
     this.actions.push(action);
+  }
+
+  public dispose(): void {
+    this.listeners.abort();
+    this.clear();
+    if (this.locked) {
+      document.exitPointerLock();
+    }
+    this.locked = false;
   }
 
   public setVirtualMove(direction: MoveDirection, active: boolean): void {
@@ -83,42 +108,29 @@ export class InputManager {
   }
 
   private bindEvents(): void {
-    window.addEventListener("keydown", this.handleKeyDown);
-    window.addEventListener("keyup", this.handleKeyUp);
-    window.addEventListener("blur", this.clear);
-    document.addEventListener("pointerlockchange", this.handlePointerLockChange);
-    document.addEventListener("mousemove", this.handleMouseMove);
+    const { signal } = this.listeners;
+    window.addEventListener("keydown", this.handleKeyDown, { signal });
+    window.addEventListener("keyup", this.handleKeyUp, { signal });
+    window.addEventListener("blur", this.clear, { signal });
+    document.addEventListener("pointerlockchange", this.handlePointerLockChange, { signal });
+    document.addEventListener("mousemove", this.handleMouseMove, { signal });
 
-    this.canvas.addEventListener("click", this.handleCanvasClick);
-    this.canvas.addEventListener("mousedown", this.handleMouseDown);
-    this.canvas.addEventListener("contextmenu", this.preventContextMenu);
-    this.canvas.addEventListener("touchstart", this.handleTouchStart, { passive: false });
-    this.canvas.addEventListener("touchmove", this.handleTouchMove, { passive: false });
-    this.canvas.addEventListener("touchend", this.handleTouchEnd, { passive: false });
+    this.canvas.addEventListener("click", this.handleCanvasClick, { signal });
+    this.canvas.addEventListener("mousedown", this.handleMouseDown, { signal });
+    this.canvas.addEventListener("contextmenu", this.preventContextMenu, { signal });
+    this.canvas.addEventListener("touchstart", this.handleTouchStart, { passive: false, signal });
+    this.canvas.addEventListener("touchmove", this.handleTouchMove, { passive: false, signal });
+    this.canvas.addEventListener("touchend", this.handleTouchEnd, { passive: false, signal });
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     this.keys.add(event.code);
-    if (event.code === "Space") {
+    if (event.code === "Space" && !event.repeat) {
       event.preventDefault();
       this.jump = true;
     }
 
-    const hotkeySlots: Record<string, number> = {
-      Digit1: 0,
-      Digit2: 1,
-      Digit3: 2,
-      Digit4: 3,
-      Digit5: 4,
-      Digit6: 5,
-      Digit7: 6,
-      Digit8: 7,
-      Digit9: 8,
-      Digit0: 9,
-      Minus: 10,
-      Equal: 11,
-    };
-    const slot = hotkeySlots[event.code];
+    const slot = BLOCK_HOTKEY_SLOTS[event.code];
     if (slot !== undefined) {
       this.options.onBlockHotkey?.(slot);
     } else if (event.code === "BracketLeft") {
@@ -135,6 +147,11 @@ export class InputManager {
   private readonly clear = (): void => {
     this.keys.clear();
     this.virtualMoves.clear();
+    this.lookX = 0;
+    this.lookY = 0;
+    this.jump = false;
+    this.touchPoint = null;
+    this.actions.length = 0;
   };
 
   private readonly handlePointerLockChange = (): void => {

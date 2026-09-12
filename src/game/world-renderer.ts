@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { BLOCK_DEFINITIONS } from "./blocks";
+import { DEFAULT_BLOCK_REGISTRY, type BlockRegistry } from "./block-registry";
 import { BlockTextureAtlas } from "./texture-atlas";
 import type { BlockTarget, VoxelPosition } from "./types";
 import type { VoxelWorld } from "./world";
@@ -17,11 +17,12 @@ export class VoxelWorldRenderer {
   public constructor(
     private readonly scene: THREE.Scene,
     private readonly world: VoxelWorld,
+    registry: BlockRegistry = DEFAULT_BLOCK_REGISTRY,
   ) {
     this.group.name = "voxel-world";
     this.scene.add(this.group);
 
-    this.textureAtlas = new BlockTextureAtlas(this.blockGeometry, BLOCK_DEFINITIONS);
+    this.textureAtlas = new BlockTextureAtlas(this.blockGeometry, registry);
 
     const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xf27b63, transparent: true });
     this.highlight = new THREE.LineSegments(

@@ -1,4 +1,5 @@
-import { BLOCK_DEFINITIONS, BLOCK_ORDER } from "../game/blocks";
+import type { BlockRegistry } from "../game/block-registry";
+import type { GameAction, MoveDirection } from "../game/input";
 import type { BlockId } from "../game/types";
 
 const keyLabel = (index: number): string => {
@@ -18,14 +19,16 @@ const keyLabel = (index: number): string => {
 };
 
 export interface HudOptions {
+  registry: BlockRegistry;
   onSelectBlock: (id: BlockId) => void;
   onReset: () => void;
   onStart: () => void;
-  onAction: (action: "break" | "place") => void;
-  onMoveButton: (direction: "forward" | "back" | "left" | "right", active: boolean) => void;
+  onAction: (action: GameAction) => void;
+  onMoveButton: (direction: MoveDirection, active: boolean) => void;
 }
 
 export class Hud {
+  private readonly listeners = new AbortController();
   private readonly root: HTMLElement;
   private readonly prompt: HTMLElement;
   private readonly targetLabel: HTMLElement;
@@ -78,15 +81,17 @@ export class Hud {
         <nav class="hotbar" id="hotbar" aria-label="Block palette">
           <span class="eyebrow">MATERIALS</span>
           <div class="hotbar-items">
-            ${BLOCK_ORDER.map(
-              (id, index) => `
-                <button class="block-slot${index === 0 ? " is-selected" : ""}" type="button" data-block="${id}" aria-label="Select ${BLOCK_DEFINITIONS[id].label}" aria-pressed="${index === 0}" title="${BLOCK_DEFINITIONS[id].label} · ${BLOCK_DEFINITIONS[id].description}">
+            ${options.registry.ids
+              .map(
+                (id, index) => `
+                <button class="block-slot${index === 0 ? " is-selected" : ""}" type="button" data-block="${id}" aria-label="Select ${options.registry.get(id).label}" aria-pressed="${index === 0}" title="${options.registry.get(id).label} · ${options.registry.get(id).description}">
                   <span class="slot-number">${keyLabel(index)}</span>
-                  <span class="swatch" style="--swatch: ${BLOCK_DEFINITIONS[id].accent}"></span>
-                  <span class="slot-label">${BLOCK_DEFINITIONS[id].label}</span>
+                  <span class="swatch" style="--swatch: ${options.registry.get(id).accent}"></span>
+                  <span class="slot-label">${options.registry.get(id).label}</span>
                 </button>
               `,
-            ).join("")}
+              )
+              .join("")}
           </div>
           <p class="selection-label" id="selection-label">Grass · soft ground</p>
         </nav>
@@ -138,30 +143,44 @@ export class Hud {
       button.setAttribute("aria-pressed", String(selected));
     }
 
-    const definition = BLOCK_DEFINITIONS[id];
+    const definition = this.options.registry.get(id);
     this.selectionLabel.textContent = `${definition.label} · ${definition.description}`;
   }
 
+  public dispose(): void {
+    this.listeners.abort();
+    this.root.replaceChildren();
+  }
+
   private bindEvents(): void {
-    this.getElement("start-game").addEventListener("click", this.options.onStart);
-    this.getElement("reset-world").addEventListener("click", this.options.onReset);
+    const { signal } = this.listeners;
+    this.getElement("start-game").addEventListener("click", this.options.onStart, { signal });
+    this.getElement("reset-world").addEventListener("click", this.options.onReset, { signal });
 
     for (const button of this.hotbar.querySelectorAll<HTMLButtonElement>("[data-block]")) {
-      button.addEventListener("click", () => {
-        const id = button.dataset.block as BlockId | undefined;
-        if (id) {
-          this.options.onSelectBlock(id);
-        }
-      });
+      button.addEventListener(
+        "click",
+        () => {
+          const id = button.dataset.block as BlockId | undefined;
+          if (id) {
+            this.options.onSelectBlock(id);
+          }
+        },
+        { signal },
+      );
     }
 
     for (const button of this.root.querySelectorAll<HTMLButtonElement>("[data-action]")) {
-      button.addEventListener("click", () => {
-        const action = button.dataset.action;
-        if (action === "break" || action === "place") {
-          this.options.onAction(action);
-        }
-      });
+      button.addEventListener(
+        "click",
+        () => {
+          const action = button.dataset.action;
+          if (action === "break" || action === "place") {
+            this.options.onAction(action);
+          }
+        },
+        { signal },
+      );
     }
 
     for (const button of this.root.querySelectorAll<HTMLButtonElement>("[data-move]")) {
@@ -176,10 +195,10 @@ export class Hud {
       }
 
       const setActive = (active: boolean): void => this.options.onMoveButton(direction, active);
-      button.addEventListener("pointerdown", () => setActive(true));
-      button.addEventListener("pointerup", () => setActive(false));
-      button.addEventListener("pointerleave", () => setActive(false));
-      button.addEventListener("pointercancel", () => setActive(false));
+      button.addEventListener("pointerdown", () => setActive(true), { signal });
+      button.addEventListener("pointerup", () => setActive(false), { signal });
+      button.addEventListener("pointerleave", () => setActive(false), { signal });
+      button.addEventListener("pointercancel", () => setActive(false), { signal });
     }
   }
 

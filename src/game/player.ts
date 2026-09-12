@@ -1,48 +1,73 @@
 import * as THREE from "three";
+import type { PlayerConfig } from "./config";
 import type { InputState } from "./input";
-import { VoxelWorld } from "./world";
+import type { Aabb } from "./types";
+import type { VoxelWorld } from "./world";
 
 export class PlayerController {
-  public readonly position = new THREE.Vector3(0.5, 1, 5.5);
-  public readonly spawnPoint = new THREE.Vector3(0.5, 1, 5.5);
+  public readonly position = new THREE.Vector3();
+  public readonly spawnPoint = new THREE.Vector3();
   public grounded = false;
 
   private yaw = 0;
   private pitch = -0.08;
   private verticalVelocity = 0;
+  private readonly movement = new THREE.Vector3();
+  private readonly forward = new THREE.Vector3();
+  private readonly right = new THREE.Vector3();
+  private readonly direction = new THREE.Vector3();
+  private readonly nextPosition = new THREE.Vector3();
+  private readonly boundsValue: Aabb = {
+    min: new THREE.Vector3(),
+    max: new THREE.Vector3(),
+  };
 
   public constructor(
     private readonly camera: THREE.PerspectiveCamera,
     private readonly world: VoxelWorld,
+    private readonly config: PlayerConfig,
   ) {
+    this.spawnPoint.fromArray(config.spawn);
+    this.position.copy(this.spawnPoint);
     this.camera.rotation.order = "YXZ";
     this.syncCamera();
   }
 
-  public update(delta: number, input: InputState): void {
-    this.yaw -= input.lookX * 0.0022;
-    this.pitch = THREE.MathUtils.clamp(this.pitch - input.lookY * 0.0022, -1.35, 1.35);
+  public get bounds(): Aabb {
+    return this.boundsFor(this.position);
+  }
 
-    const movement = new THREE.Vector3(input.moveX, 0, -input.moveZ);
-    if (movement.lengthSq() > 1) {
-      movement.normalize();
+  public update(delta: number, input: InputState): void {
+    this.yaw -= input.lookX * this.config.lookSensitivity;
+    this.pitch = THREE.MathUtils.clamp(
+      this.pitch - input.lookY * this.config.lookSensitivity,
+      -1.35,
+      1.35,
+    );
+
+    this.movement.set(input.moveX, 0, -input.moveZ);
+    if (this.movement.lengthSq() > 1) {
+      this.movement.normalize();
     }
 
-    const forward = new THREE.Vector3(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, Math.sin(this.yaw));
-    const direction = new THREE.Vector3()
-      .addScaledVector(right, movement.x)
-      .addScaledVector(forward, movement.z);
+    this.forward.set(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this.right.set(Math.cos(this.yaw), 0, Math.sin(this.yaw));
+    this.direction
+      .set(0, 0, 0)
+      .addScaledVector(this.right, this.movement.x)
+      .addScaledVector(this.forward, this.movement.z);
 
-    const speed = 4.2;
-    this.moveHorizontal(direction.x * speed * delta, direction.z * speed * delta);
+    this.moveHorizontal(
+      this.direction.x * this.config.speed * delta,
+      this.direction.z * this.config.speed * delta,
+    );
 
     if (input.jump && this.grounded) {
-      this.verticalVelocity = 6.4;
+      this.verticalVelocity = this.config.jumpVelocity;
       this.grounded = false;
     }
 
-    this.verticalVelocity -= 18 * delta;
+    this.verticalVelocity -= this.config.gravity * delta;
     this.moveVertical(this.verticalVelocity * delta);
     this.syncCamera();
   }
@@ -55,24 +80,24 @@ export class PlayerController {
   }
 
   private moveHorizontal(deltaX: number, deltaZ: number): void {
-    const nextX = this.position.clone();
-    nextX.x += deltaX;
-    if (this.world.canOccupy(VoxelWorld.playerBounds(nextX))) {
-      this.position.x = nextX.x;
+    this.nextPosition.copy(this.position);
+    this.nextPosition.x += deltaX;
+    if (this.world.canOccupy(this.boundsFor(this.nextPosition))) {
+      this.position.x = this.nextPosition.x;
     }
 
-    const nextZ = this.position.clone();
-    nextZ.z += deltaZ;
-    if (this.world.canOccupy(VoxelWorld.playerBounds(nextZ))) {
-      this.position.z = nextZ.z;
+    this.nextPosition.copy(this.position);
+    this.nextPosition.z += deltaZ;
+    if (this.world.canOccupy(this.boundsFor(this.nextPosition))) {
+      this.position.z = this.nextPosition.z;
     }
   }
 
   private moveVertical(deltaY: number): void {
-    const next = this.position.clone();
-    next.y += deltaY;
-    if (this.world.canOccupy(VoxelWorld.playerBounds(next))) {
-      this.position.y = next.y;
+    this.nextPosition.copy(this.position);
+    this.nextPosition.y += deltaY;
+    if (this.world.canOccupy(this.boundsFor(this.nextPosition))) {
+      this.position.y = this.nextPosition.y;
       this.grounded = false;
       return;
     }
@@ -84,7 +109,22 @@ export class PlayerController {
   }
 
   private syncCamera(): void {
-    this.camera.position.set(this.position.x, this.position.y + 1.62, this.position.z);
+    this.camera.position.set(
+      this.position.x,
+      this.position.y + this.config.eyeHeight,
+      this.position.z,
+    );
     this.camera.rotation.set(this.pitch, this.yaw, 0);
+  }
+
+  private boundsFor(position: THREE.Vector3): Aabb {
+    const halfWidth = this.config.width / 2;
+    this.boundsValue.min.set(position.x - halfWidth, position.y, position.z - halfWidth);
+    this.boundsValue.max.set(
+      position.x + halfWidth,
+      position.y + this.config.height,
+      position.z + halfWidth,
+    );
+    return this.boundsValue;
   }
 }
