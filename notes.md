@@ -1,19 +1,31 @@
-# Notes: nomio procedural block textures
+# Notes: nomio maintainability refactor
 
-## Baseline and result
+## Baseline
 
 - The repository contains a playable floating-island voxel MVP with a data-first `VoxelWorld`.
 - Three.js `0.186.0`, Vite `8.3.0`, strict TypeScript, ESLint, Prettier, Husky, and commitlint are already configured.
-- `VoxelWorldRenderer` now consumes cached UV geometry and per-block materials from `BlockTextureAtlas`.
-- The block catalog now contains 17 recipe-driven definitions.
+- `main.ts` should remain a minimal browser bootstrap; `NomioApplication` owns the app lifecycle and `GameSession` owns runtime composition.
+- `BlockTextureAtlas` already provides a good renderer seam but is constructed from global block definitions.
+- `InputManager` and `Hud` attach browser listeners but do not expose disposal methods.
+- `PlayerController` consumes grouped `PlayerConfig` values and exposes its collision bounds to interaction systems.
+- `VoxelWorld` is data-first but exposes a static player-bounds helper, mixing world storage with player collision details.
 
-## Texture direction
+## Refactor direction
 
-- Generate each face into a 64×64 HTML canvas, pack all tiles into one shared `THREE.CanvasTexture`, and remap cached BoxGeometry UVs per block.
-- Preserve a Minecraft-like pixel vocabulary with hard-edged pixels, small tonal clusters, seams, grain, and face variation rather than photographic noise.
-- Use seeded random sampling so a block’s texture is stable between reloads and easy to art-direct.
-- Built-in pattern families should cover: noise, speckle/ore, cobble, planks, log rings, leaves, glass, brick, snow, netherrack, and obsidian.
-- Atlas should use `[side, side, top, bottom, side, side]` against `BoxGeometry`’s standard face order and avoid mipmap bleeding.
+- `NomioApplication` should own the browser lifecycle and expose `start()` / `dispose()`.
+- `GameSession` should compose world, renderer, player, interactor, HUD, input, and timer without leaking composition into `main.ts`.
+- `SceneRuntime` should own renderer/camera/lights and resize behavior.
+- `BlockRegistry` should be the single source for definitions and order; HUD, atlas, and selection should depend on it.
+- `GameConfig` should group camera, player, interaction, and rendering tuning with defaults.
+- Each event-driven service should use an `AbortController` or explicit listener cleanup.
+
+## Refactor delivered
+
+- Added `NomioApplication`, `GameSession`, `SceneRuntime`, `GameShell`, `GameConfig`, and `BlockRegistry` boundaries.
+- Added injectable world factories and configuration overrides for fixtures, alternate generators, and tuning.
+- Added `VoxelWorld.replace()` / `toArray()` and moved player AABB ownership into `PlayerController`.
+- Added deterministic cleanup for input, HUD, timer, renderer, atlas, and resize listeners.
+- Reused player movement vectors to avoid allocating several Three.js vectors per frame.
 
 ## Block catalog delivered
 

@@ -15,10 +15,11 @@
 
 ## Extension seams
 
-- Add block definitions in `src/game/blocks.ts`.
+- Add block definitions in `src/game/blocks.ts` and expose their order through a `BlockRegistry`.
 - Add a texture family with `registerTexturePattern()` in `src/game/procedural-textures.ts`.
 - Give a new block a `TextureRecipe`; the atlas automatically creates its side, top, and bottom tiles and UV geometry.
-- Swap or compose terrain generators in `src/game/world-generator.ts`.
+- Swap or compose terrain generators with `GameSessionOptions.worldFactory`.
+- Tune movement, camera, interaction, and rendering through `GameConfigOverrides`.
 - Replace the per-block renderer in `src/game/world-renderer.ts` with chunk meshing later.
 - Add tools or actions through `GameAction` and `VoxelInteractor`.
 - Persist or synchronize world data from the `VoxelWorld` API without changing the HUD.

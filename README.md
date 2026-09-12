@@ -38,8 +38,13 @@ The game is split into small modules so the world model can evolve independently
 
 ```text
 src/
+├── app/
+│   └── application.ts     # Browser lifecycle and composition entrypoint
 ├── game/
-│   ├── blocks.ts          # Block palette and definitions
+│   ├── block-registry.ts  # Injectable block definitions and ordering
+│   ├── blocks.ts          # Default block catalog
+│   ├── config.ts          # Injectable camera, player, input, and render tuning
+│   ├── game-session.ts    # Runtime composition, loop, selection, and reset
 │   ├── input.ts           # Keyboard, mouse, touch, and virtual controls
 │   ├── interactor.ts      # Raycast targeting and break/place actions
 │   ├── player.ts          # First-person look, movement, gravity, collision
@@ -51,14 +56,28 @@ src/
 │   ├── world-generator.ts # Deterministic starter island
 │   └── world-renderer.ts  # Three.js block meshes and target highlight
 ├── ui/
+│   ├── game-shell.ts      # Canvas and UI DOM shell
 │   └── hud.ts             # HUD, palette, prompt, and touch controls
-├── main.ts                # Composition root and render loop
+├── main.ts                # Minimal browser bootstrap
 └── style.css              # Responsive field-note interface
 ```
+
+`NomioApplication` owns the browser entrypoint and creates a disposable `GameSession`. The session composes the scene runtime, world, renderer, player, interactor, input, and HUD. `SceneRuntime` owns Three.js setup and resize handling; event-driven services expose `dispose()` so sessions can be restarted, tested, or replaced without leaking listeners.
+
+`BlockRegistry` is the catalog boundary. The HUD, atlas, renderer, and selection logic consume it instead of importing block order directly, so a session can provide a different catalog/order. `GameSession` also accepts `GameConfig` overrides and a world factory for tuning or test fixtures.
 
 Every block definition declares a palette, seed, pattern, and material properties. The procedural texture registry renders separate 64×64 top, side, and bottom tiles, and `BlockTextureAtlas` packs all tiles into one shared `CanvasTexture`, rewrites cached block UVs, and applies the atlas to Three.js meshes. Register a new drawer with `registerTexturePattern()` and reference it from a block recipe without changing the renderer.
 
 The world currently renders one mesh per block. That keeps the MVP easy to understand and leaves a clear seam for chunk meshing, texture atlases, persistence, or procedural generators in a later iteration.
+
+## Extension seams
+
+- Add block definitions in `src/game/blocks.ts` and expose their order through a `BlockRegistry`.
+- Add a texture family with `registerTexturePattern()` in `src/game/procedural-textures.ts`.
+- Give a new block a `TextureRecipe`; the atlas automatically creates its side, top, and bottom tiles and UV geometry.
+- Swap or compose terrain generators with `GameSessionOptions.worldFactory`.
+- Tune movement, camera, interaction, and rendering through `GameConfigOverrides`.
+- Replace the per-block renderer in `src/game/world-renderer.ts` with chunk meshing later.
 
 ## Git and quality
 

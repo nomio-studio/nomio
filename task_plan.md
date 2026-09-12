@@ -1,35 +1,33 @@
-# Task Plan: nomio procedural block textures
+# Task Plan: nomio maintainability refactor
 
 ## Goal
 
-Extend the playable nomio voxel game with an extensible procedural texture system that generates refined Minecraft-like 64×64 block textures for at least a dozen basic materials.
+Refactor the current nomio voxel game into a standardized, highly modular runtime that is easy to maintain, test, and extend without changing the game’s behavior.
 
 ## Phases
 
-- [x] Phase 1: Audit current block/material seams and design the procedural texture contracts
-- [x] Phase 2: Implement deterministic 64×64 tiles and pack them into a shared texture atlas
-- [x] Phase 3: Remap cached block UVs and preserve per-block material properties
-- [x] Phase 4: Verify atlas runtime integration, quality gates, documentation, and atomic commits
+- [x] Phase 1: Map current coupling and define refactor boundaries
+- [x] Phase 2: Extract application composition, scene runtime, and game configuration
+- [x] Phase 3: Introduce registries, lifecycle cleanup, and reusable service contracts
+- [x] Phase 4: Verify behavior, update documentation, and create atomic commits
 
 ## Key Questions
 
-1. How can new block textures be registered without modifying the renderer?
-2. Which deterministic pattern families cover natural, crafted, transparent, and ore materials?
-3. How do 64×64 face textures preserve crisp pixel character while still looking refined at runtime?
+1. Which modules should own lifecycle, configuration, data, rendering, input, and UI concerns?
+2. How can custom block registries and game configuration be injected without global imports?
+3. Can every event-driven service be disposed cleanly for tests, hot reload, and future scene switching?
 
 ## Decisions Made
 
-- Keep the data-first `VoxelWorld` and separate block definitions from rendering.
-- Describe each block with a `TextureRecipe` containing pattern, palette, seed, and material properties.
-- Register procedural pattern drawers in a map so texture families can be added independently of the atlas.
-- Generate separate top, side, and bottom tiles at `64 × 64`, then pack them into one atlas CanvasTexture.
-- Cache one UV-remapped geometry per block ID and keep material properties recipe-driven.
-- Keep the dependency-light approach: browser Canvas + Three.js, with no downloaded image assets.
+- Keep `main.ts` as a minimal browser bootstrap and move dependency wiring into an application layer.
+- Inject `BlockRegistry` and `GameConfig` into systems that currently import global constants or hard-code tuning.
+- Make input, HUD, scene runtime, and game session own explicit `dispose()` lifecycles.
+- Preserve the existing atlas, world, and player behavior while reducing per-frame allocations and duplicated wiring.
 
 ## Errors Encountered
 
-- Previous MVP work is complete and provides the integration baseline.
+- The existing MVP and procedural atlas are the integration baseline.
 
 ## Status
 
-**Complete** - The shared atlas, UV remapping, renderer integration, documentation, quality gates, and atomic commits are complete.
+**Complete** - The modular runtime is implemented, documented, browser-smoke-tested, and ready in atomic commits.
