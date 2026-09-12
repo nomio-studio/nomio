@@ -168,3 +168,7 @@ Terrain is generated in 16×16×40 chunks and is effectively endless, with a def
 ## Git and quality
 
 The repository uses Conventional Commits, Husky, lint-staged, ESLint, Prettier, and strict TypeScript. Changes for the MVP are kept in atomic commits so the gameplay foundation and documentation remain easy to review independently.
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 or later (`AGPL-3.0-or-later`). See [LICENSE](LICENSE) for the full text.
