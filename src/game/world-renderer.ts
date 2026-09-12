@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { BLOCK_DEFINITIONS } from "./blocks";
-import { type BlockMaterialSet, ProceduralTextureFactory } from "./procedural-textures";
-import type { BlockId, BlockTarget, VoxelPosition } from "./types";
+import { BlockTextureAtlas } from "./texture-atlas";
+import type { BlockTarget, VoxelPosition } from "./types";
 import type { VoxelWorld } from "./world";
 
 interface BlockMeshData {
@@ -12,8 +12,7 @@ export class VoxelWorldRenderer {
   private readonly group = new THREE.Group();
   private readonly blockGeometry = new THREE.BoxGeometry(1, 1, 1);
   private readonly highlight: THREE.LineSegments;
-  private readonly textureFactory = new ProceduralTextureFactory();
-  private readonly materialSets = new Map<BlockId, BlockMaterialSet>();
+  private readonly textureAtlas: BlockTextureAtlas;
 
   public constructor(
     private readonly scene: THREE.Scene,
@@ -22,9 +21,7 @@ export class VoxelWorldRenderer {
     this.group.name = "voxel-world";
     this.scene.add(this.group);
 
-    for (const definition of Object.values(BLOCK_DEFINITIONS)) {
-      this.materialSets.set(definition.id, this.textureFactory.createMaterialSet(definition));
-    }
+    this.textureAtlas = new BlockTextureAtlas(this.blockGeometry, BLOCK_DEFINITIONS);
 
     const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xf27b63, transparent: true });
     this.highlight = new THREE.LineSegments(
@@ -43,12 +40,10 @@ export class VoxelWorldRenderer {
     this.group.clear();
 
     this.world.forEach((cell) => {
-      const materialSet = this.materialSets.get(cell.id);
-      if (!materialSet) {
-        return;
-      }
-
-      const mesh = new THREE.Mesh(this.blockGeometry, materialSet.materials);
+      const mesh = new THREE.Mesh(
+        this.textureAtlas.getGeometry(cell.id),
+        this.textureAtlas.getMaterial(cell.id),
+      );
       mesh.position.set(cell.x + 0.5, cell.y + 0.5, cell.z + 0.5);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -97,9 +92,7 @@ export class VoxelWorldRenderer {
     this.blockGeometry.dispose();
     this.highlight.geometry.dispose();
     (this.highlight.material as THREE.Material).dispose();
-    for (const materialSet of this.materialSets.values()) {
-      this.textureFactory.disposeMaterialSet(materialSet);
-    }
+    this.textureAtlas.dispose();
     this.scene.remove(this.group, this.highlight);
   }
 }

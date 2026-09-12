@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import type { BlockDefinition } from "./blocks";
 import type { TextureFace, TextureRecipe } from "./texture-types";
 
 export const TEXTURE_SIZE = 64;
@@ -357,10 +356,10 @@ const faceSeed = (face: TextureFace): number => {
   return 23;
 };
 
-export const createProceduralTexture = (
+export const createProceduralTileCanvas = (
   recipe: TextureRecipe,
   face: TextureFace,
-): THREE.CanvasTexture => {
+): HTMLCanvasElement => {
   const canvas = document.createElement("canvas");
   canvas.width = TEXTURE_SIZE;
   canvas.height = TEXTURE_SIZE;
@@ -379,7 +378,14 @@ export const createProceduralTexture = (
   };
   const drawer = textureDrawers.get(recipe.pattern) ?? drawStone;
   drawer(draw);
+  return canvas;
+};
 
+export const createProceduralTexture = (
+  recipe: TextureRecipe,
+  face: TextureFace,
+): THREE.CanvasTexture => {
+  const canvas = createProceduralTileCanvas(recipe, face);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.magFilter = THREE.NearestFilter;
@@ -388,56 +394,5 @@ export const createProceduralTexture = (
   texture.needsUpdate = true;
   return texture;
 };
-
-export interface BlockMaterialSet {
-  materials: THREE.MeshStandardMaterial[];
-  textures: THREE.CanvasTexture[];
-}
-
-export class ProceduralTextureFactory {
-  public createMaterialSet(definition: BlockDefinition): BlockMaterialSet {
-    const recipe = definition.texture;
-    const sideTexture = createProceduralTexture(recipe, "side");
-    const topTexture = createProceduralTexture(recipe, "top");
-    const bottomTexture = createProceduralTexture(recipe, "bottom");
-    const textures = [sideTexture, topTexture, bottomTexture];
-    const makeMaterial = (map: THREE.CanvasTexture): THREE.MeshStandardMaterial =>
-      new THREE.MeshStandardMaterial({
-        map,
-        color: 0xffffff,
-        roughness: recipe.roughness ?? 0.86,
-        metalness: recipe.metalness ?? 0,
-        transparent: recipe.transparent ?? false,
-        opacity: recipe.opacity ?? 1,
-        depthWrite: !(recipe.transparent ?? false),
-        alphaTest: recipe.transparent ? 0.02 : 0,
-        flatShading: true,
-      });
-    const sideMaterial = makeMaterial(sideTexture);
-    const topMaterial = makeMaterial(topTexture);
-    const bottomMaterial = makeMaterial(bottomTexture);
-
-    return {
-      materials: [
-        sideMaterial,
-        sideMaterial,
-        topMaterial,
-        bottomMaterial,
-        sideMaterial,
-        sideMaterial,
-      ],
-      textures,
-    };
-  }
-
-  public disposeMaterialSet(set: BlockMaterialSet): void {
-    for (const material of new Set(set.materials)) {
-      material.dispose();
-    }
-    for (const texture of set.textures) {
-      texture.dispose();
-    }
-  }
-}
 
 registerBuiltInTextureDrawers();
