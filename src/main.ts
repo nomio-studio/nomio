@@ -42,7 +42,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const hemiLight = new THREE.HemisphereLight(0xd9eff0, 0x283741, 2.1);
 scene.add(hemiLight);
@@ -126,10 +126,12 @@ hud.selectBlock(selectedBlock);
 hud.setBlockCount(world.size);
 interactor.update();
 
-const clock = new THREE.Clock();
+const timer = new THREE.Timer();
+timer.connect(document);
 const animate = (): void => {
   requestAnimationFrame(animate);
-  const delta = Math.min(clock.getDelta(), 0.05);
+  timer.update();
+  const delta = Math.min(timer.getDelta(), 0.05);
   const inputState = input.consume();
 
   player.update(delta, inputState);
