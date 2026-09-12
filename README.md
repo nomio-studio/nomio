@@ -43,7 +43,8 @@ src/
 │   ├── input.ts           # Keyboard, mouse, touch, and virtual controls
 │   ├── interactor.ts      # Raycast targeting and break/place actions
 │   ├── player.ts          # First-person look, movement, gravity, collision
-│   ├── procedural-textures.ts # Deterministic 64×64 CanvasTexture factory
+│   ├── procedural-textures.ts # Deterministic 64×64 tile drawer library
+│   ├── texture-atlas.ts   # Shared atlas canvas, UV geometry, and materials
 │   ├── texture-types.ts   # Texture recipe and face contracts
 │   ├── types.ts           # Shared voxel and game contracts
 │   ├── world.ts           # Data-first voxel storage and AABB queries
@@ -55,7 +56,7 @@ src/
 └── style.css              # Responsive field-note interface
 ```
 
-Every block definition declares a palette, seed, pattern, and material properties. The procedural texture registry turns that recipe into separate 64×64 top, side, and bottom `CanvasTexture` maps with nearest filtering, then the renderer applies them to Three.js box faces. Register a new drawer with `registerTexturePattern()` and reference it from a block recipe without changing the renderer.
+Every block definition declares a palette, seed, pattern, and material properties. The procedural texture registry renders separate 64×64 top, side, and bottom tiles, and `BlockTextureAtlas` packs all tiles into one shared `CanvasTexture`, rewrites cached block UVs, and applies the atlas to Three.js meshes. Register a new drawer with `registerTexturePattern()` and reference it from a block recipe without changing the renderer.
 
 The world currently renders one mesh per block. That keeps the MVP easy to understand and leaves a clear seam for chunk meshing, texture atlases, persistence, or procedural generators in a later iteration.
 

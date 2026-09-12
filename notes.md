@@ -4,16 +4,16 @@
 
 - The repository contains a playable floating-island voxel MVP with a data-first `VoxelWorld`.
 - Three.js `0.186.0`, Vite `8.3.0`, strict TypeScript, ESLint, Prettier, Husky, and commitlint are already configured.
-- `VoxelWorldRenderer` now consumes face-aware material sets from `ProceduralTextureFactory`.
+- `VoxelWorldRenderer` now consumes cached UV geometry and per-block materials from `BlockTextureAtlas`.
 - The block catalog now contains 17 recipe-driven definitions.
 
 ## Texture direction
 
-- Generate each face into a 64×64 HTML canvas and wrap it in a `THREE.CanvasTexture`.
+- Generate each face into a 64×64 HTML canvas, pack all tiles into one shared `THREE.CanvasTexture`, and remap cached BoxGeometry UVs per block.
 - Preserve a Minecraft-like pixel vocabulary with hard-edged pixels, small tonal clusters, seams, grain, and face variation rather than photographic noise.
 - Use seeded random sampling so a block’s texture is stable between reloads and easy to art-direct.
 - Built-in pattern families should cover: noise, speckle/ore, cobble, planks, log rings, leaves, glass, brick, snow, netherrack, and obsidian.
-- Renderer should use `[side, side, top, bottom, side, side]` against `BoxGeometry`’s standard material groups.
+- Atlas should use `[side, side, top, bottom, side, side]` against `BoxGeometry`’s standard face order and avoid mipmap bleeding.
 
 ## Block catalog delivered
 

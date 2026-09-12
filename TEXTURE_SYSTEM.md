@@ -14,13 +14,15 @@ Each block owns a `TextureRecipe`:
 }
 ```
 
-The `ProceduralTextureFactory` uses that recipe to create three independent `THREE.CanvasTexture` objects—`side`, `top`, and `bottom`—at exactly `64 × 64` pixels. `BoxGeometry` receives them in its standard face order:
+The procedural drawer library uses that recipe to create three temporary HTML canvas tiles—`side`, `top`, and `bottom`—at exactly `64 × 64` pixels. `BlockTextureAtlas` packs every tile into one shared atlas canvas. With 17 blocks and three faces, the current layout is eight columns by seven rows: `512 × 448` pixels containing 51 tiles.
+
+Each block receives cached UV geometry that points its six cube faces into the shared atlas in the standard BoxGeometry face order:
 
 ```text
 [ side, side, top, bottom, side, side ]
 ```
 
-All textures use `THREE.SRGBColorSpace`, nearest magnification, nearest mip selection, and deterministic seeded sampling. This keeps the surfaces crisp and stable while allowing each face to have a slightly different pattern distribution.
+The atlas uses `THREE.SRGBColorSpace`, nearest magnification and minification, no mipmaps, and deterministic seeded sampling. Disabling mipmaps prevents color bleeding between adjacent pixel-art tiles while preserving crisp edges.
 
 ## Built-in families
 
@@ -45,4 +47,4 @@ registerTexturePattern("my-pattern", ({ context, palette, size }) => {
 });
 ```
 
-Then assign `pattern: "my-pattern"` to a block’s recipe in `src/game/blocks.ts`. The existing factory handles canvas sizing, seeded context setup, color space, filtering, material properties, and disposal.
+Then assign `pattern: "my-pattern"` to a block’s recipe in `src/game/blocks.ts`. The atlas handles tile sizing, packing, seeded context setup, UV remapping, color space, filtering, material properties, and disposal.

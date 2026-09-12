@@ -7,9 +7,9 @@ Extend the playable nomio voxel game with an extensible procedural texture syste
 ## Phases
 
 - [x] Phase 1: Audit current block/material seams and design the procedural texture contracts
-- [x] Phase 2: Implement deterministic 64×64 texture generation and face-aware material sets
-- [x] Phase 3: Expand the block catalog to a dozen-plus materials and expose it in gameplay
-- [x] Phase 4: Verify visual/runtime integration, quality gates, documentation, and atomic commits
+- [x] Phase 2: Implement deterministic 64×64 tiles and pack them into a shared texture atlas
+- [x] Phase 3: Remap cached block UVs and preserve per-block material properties
+- [ ] Phase 4: Verify atlas runtime integration, quality gates, documentation, and atomic commits
 
 ## Key Questions
 
@@ -21,8 +21,9 @@ Extend the playable nomio voxel game with an extensible procedural texture syste
 
 - Keep the data-first `VoxelWorld` and separate block definitions from rendering.
 - Describe each block with a `TextureRecipe` containing pattern, palette, seed, and material properties.
-- Register procedural pattern drawers in a map so texture families can be added independently of the factory.
-- Generate separate top, side, and bottom CanvasTextures at `64 × 64`, using nearest filtering for pixel clarity.
+- Register procedural pattern drawers in a map so texture families can be added independently of the atlas.
+- Generate separate top, side, and bottom tiles at `64 × 64`, then pack them into one atlas CanvasTexture.
+- Cache one UV-remapped geometry per block ID and keep material properties recipe-driven.
 - Keep the dependency-light approach: browser Canvas + Three.js, with no downloaded image assets.
 
 ## Errors Encountered
@@ -31,4 +32,4 @@ Extend the playable nomio voxel game with an extensible procedural texture syste
 
 ## Status
 
-**Complete** - The 64×64 texture factory, 17-block catalog, renderer integration, documentation, quality gates, and atomic commits are complete.
+**Currently in Phase 4** - The shared atlas, UV remapping, renderer integration, and docs are complete; final verification and atomic commit remain.
