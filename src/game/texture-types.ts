@@ -8,4 +8,6 @@ export interface TextureRecipe {
   metalness?: number;
   transparent?: boolean;
   opacity?: number;
+  /** Light level (0-15) this block emits into the voxel light engine. */
+  lightEmission?: number;
 }

@@ -8,6 +8,9 @@ export class PlayerController {
   public readonly position = new THREE.Vector3();
   public readonly spawnPoint = new THREE.Vector3();
   public grounded = false;
+  /** Multiplier over the configured look sensitivity, tuned from settings. */
+  public lookSensitivity: number;
+  public invertLook = false;
 
   private yaw = 0;
   private pitch = -0.08;
@@ -29,6 +32,7 @@ export class PlayerController {
   ) {
     this.spawnPoint.fromArray(config.spawn);
     this.position.copy(this.spawnPoint);
+    this.lookSensitivity = config.lookSensitivity;
     this.camera.rotation.order = "YXZ";
     this.syncCamera();
   }
@@ -38,12 +42,9 @@ export class PlayerController {
   }
 
   public update(delta: number, input: InputState): void {
-    this.yaw -= input.lookX * this.config.lookSensitivity;
-    this.pitch = THREE.MathUtils.clamp(
-      this.pitch - input.lookY * this.config.lookSensitivity,
-      -1.35,
-      1.35,
-    );
+    this.yaw -= input.lookX * this.lookSensitivity;
+    const pitchDelta = input.lookY * this.lookSensitivity * (this.invertLook ? 1 : -1);
+    this.pitch = THREE.MathUtils.clamp(this.pitch + pitchDelta, -1.35, 1.35);
 
     this.movement.set(input.moveX, 0, -input.moveZ);
     if (this.movement.lengthSq() > 1) {

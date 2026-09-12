@@ -14,7 +14,7 @@ Each block owns a `TextureRecipe`:
 }
 ```
 
-The procedural drawer library uses that recipe to create three temporary HTML canvas tiles—`side`, `top`, and `bottom`—at exactly `64 × 64` pixels. `BlockTextureAtlas` packs every tile into one shared atlas canvas. With 17 blocks and three faces, the current layout is eight columns by seven rows: `512 × 448` pixels containing 51 tiles.
+The procedural drawer library uses that recipe to create three temporary HTML canvas tiles—`side`, `top`, and `bottom`—at exactly `64 × 64` pixels. `BlockTextureAtlas` packs every tile into one shared atlas canvas with a two-pixel extruded border per tile. With 17 blocks and three faces, the current layout is eight columns by seven rows of `68 × 68` cells: `544 × 476` pixels containing 51 tiles.
 
 Each block receives cached UV geometry that points its six cube faces into the shared atlas in the standard BoxGeometry face order:
 
@@ -22,7 +22,7 @@ Each block receives cached UV geometry that points its six cube faces into the s
 [ side, side, top, bottom, side, side ]
 ```
 
-The atlas uses `THREE.SRGBColorSpace`, nearest magnification and minification, no mipmaps, and deterministic seeded sampling. Disabling mipmaps prevents color bleeding between adjacent pixel-art tiles while preserving crisp edges.
+The atlas uses `THREE.SRGBColorSpace`, nearest magnification, `NearestMipmapLinearFilter` minification, mipmaps, and deterministic seeded sampling. Each tile's edge pixels are extruded into its padding so mipmap sampling and filtering never bleed colors between adjacent pixel-art tiles while distant blocks stay crisp instead of shimmering.
 
 ## Built-in families
 

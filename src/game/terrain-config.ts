@@ -17,5 +17,5 @@ export const DEFAULT_TERRAIN_CONFIG: TerrainConfig = {
   gain: 0.5,
   baseHeight: 4,
   heightAmplitude: 8,
-  viewDistance: 1,
+  viewDistance: 16,
 };

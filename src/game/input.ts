@@ -42,6 +42,7 @@ export class InputManager {
   private jump = false;
   private touchPoint: { x: number; y: number } | null = null;
   private locked = false;
+  private interactive = true;
 
   public constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -54,8 +55,33 @@ export class InputManager {
     return this.locked;
   }
 
-  public requestPointerLock(): void {
-    void this.canvas.requestPointerLock();
+  /**
+   * Enables pointer-lock capture from canvas clicks. Disabled on the title and
+   * loading screens so only the explicit start action begins play.
+   */
+  public setInteractive(interactive: boolean): void {
+    this.interactive = interactive;
+  }
+
+  public requestPointerLock(): Promise<boolean> {
+    try {
+      const result = this.canvas.requestPointerLock() as unknown;
+      if (result && typeof (result as Promise<void>).then === "function") {
+        return (result as Promise<void>).then(
+          () => true,
+          () => false,
+        );
+      }
+    } catch {
+      return Promise.resolve(false);
+    }
+    return Promise.resolve(true);
+  }
+
+  public exitPointerLock(): void {
+    if (document.pointerLockElement === this.canvas) {
+      document.exitPointerLock();
+    }
   }
 
   public queueAction(action: GameAction): void {
@@ -168,8 +194,8 @@ export class InputManager {
   };
 
   private readonly handleCanvasClick = (): void => {
-    if (!this.locked) {
-      this.requestPointerLock();
+    if (this.interactive && !this.locked) {
+      void this.requestPointerLock();
     }
   };
 

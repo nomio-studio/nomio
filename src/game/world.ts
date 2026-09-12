@@ -9,6 +9,7 @@ import {
   chunkKey,
   isValidBlockType,
   localCoordinate,
+  type ChunkCoordinate,
   type VoxelChunk,
 } from "./chunk-types";
 import type { Aabb, BlockCell, BlockId, VoxelPosition } from "./types";
@@ -25,6 +26,8 @@ const countSolidBlocks = (blocks: Uint8Array): number => {
 
 export class VoxelWorld {
   private readonly chunks = new Map<string, VoxelChunk>();
+  private readonly editedChunks = new Map<string, Uint8Array>();
+  private readonly dirtyChunks = new Set<string>();
   private blockCount = 0;
 
   public constructor(cells: Iterable<BlockCell> = []) {
@@ -40,26 +43,30 @@ export class VoxelWorld {
 
   public clear(): void {
     this.chunks.clear();
+    this.editedChunks.clear();
+    this.dirtyChunks.clear();
     this.blockCount = 0;
   }
 
   public setChunk(chunk: VoxelChunk): void {
-    if (chunk.blocks.length !== CHUNK_VOLUME) {
+    const key = chunkKey(chunk);
+    const edited = this.editedChunks.get(key);
+    const blocks = edited ?? chunk.blocks;
+    if (blocks.length !== CHUNK_VOLUME) {
       throw new Error(`Chunk ${chunk.x},${chunk.z} has an invalid buffer length`);
     }
-    for (const value of chunk.blocks) {
+    for (const value of blocks) {
       if (!isValidBlockType(value)) {
         throw new Error(`Chunk ${chunk.x},${chunk.z} contains an invalid block type`);
       }
     }
 
-    const key = chunkKey(chunk);
     const previous = this.chunks.get(key);
     if (previous) {
       this.blockCount -= countSolidBlocks(previous.blocks);
     }
-    this.chunks.set(key, chunk);
-    this.blockCount += countSolidBlocks(chunk.blocks);
+    this.chunks.set(key, { x: chunk.x, z: chunk.z, blocks });
+    this.blockCount += countSolidBlocks(blocks);
   }
 
   public removeChunk(coordinate: { x: number; z: number }): boolean {
@@ -71,6 +78,28 @@ export class VoxelWorld {
     this.blockCount -= countSolidBlocks(chunk.blocks);
     this.chunks.delete(key);
     return true;
+  }
+
+  public getEditedChunk(coordinate: { x: number; z: number }): VoxelChunk | null {
+    const blocks = this.editedChunks.get(chunkKey(coordinate));
+    if (!blocks) {
+      return null;
+    }
+    return { x: coordinate.x, z: coordinate.z, blocks };
+  }
+
+  /** Returns and clears the chunks changed since the last call. */
+  public consumeDirtyChunks(): ChunkCoordinate[] {
+    if (this.dirtyChunks.size === 0) {
+      return [];
+    }
+    const coordinates: ChunkCoordinate[] = [];
+    for (const key of this.dirtyChunks) {
+      const [x, z] = key.split(",").map(Number);
+      coordinates.push({ x, z });
+    }
+    this.dirtyChunks.clear();
+    return coordinates;
   }
 
   public forEachChunk(callback: (chunk: VoxelChunk) => void): void {
@@ -127,6 +156,7 @@ export class VoxelWorld {
     if (previous === blockType) {
       return;
     }
+    this.markEdited(key, chunk.blocks);
     if (previous === BLOCK_TYPE.AIR && blockType !== BLOCK_TYPE.AIR) {
       this.blockCount += 1;
     } else if (previous !== BLOCK_TYPE.AIR && blockType === BLOCK_TYPE.AIR) {
@@ -223,8 +253,16 @@ export class VoxelWorld {
     }
     const index = chunkIndex(localCoordinate(position.x), position.y, localCoordinate(position.z));
     if (chunk.blocks[index] !== BLOCK_TYPE.AIR) {
+      this.markEdited(chunkKey(chunk), chunk.blocks);
       chunk.blocks[index] = BLOCK_TYPE.AIR;
       this.blockCount -= 1;
     }
+  }
+
+  private markEdited(key: string, blocks: Uint8Array): void {
+    if (!this.editedChunks.has(key)) {
+      this.editedChunks.set(key, blocks);
+    }
+    this.dirtyChunks.add(key);
   }
 }

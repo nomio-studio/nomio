@@ -73,7 +73,6 @@ export class VoxelInteractor {
   }
 
   private changed(): void {
-    this.renderer.sync();
     this.options.onWorldChanged?.();
     this.update();
   }

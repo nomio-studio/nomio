@@ -72,6 +72,8 @@ export interface BlockDefinition {
   accent: string;
   description: string;
   texture: TextureRecipe;
+  /** Emitted light color when the block glows; defaults to `color`. */
+  emissionColor?: number;
 }
 
 const recipe = (
@@ -228,9 +230,11 @@ export const BLOCK_DEFINITIONS: Record<BlockId, BlockDefinition> = {
     color: 0x6d97a8,
     accent: "#6d97a8",
     description: "cold light",
+    emissionColor: 0x9fd6df,
     texture: recipe("crystal", ["#315d79", "#467c95", "#9fd6df", "#d6ffff"], 79, {
       roughness: 0.34,
       metalness: 0.16,
+      lightEmission: 13,
     }),
   },
 };
@@ -254,3 +258,18 @@ export const BLOCK_ORDER: BlockId[] = [
   "mossy_cobblestone",
   "crystal",
 ];
+
+/** Emitted light level per numeric block type, indexed like `BLOCK_TYPE_TO_ID`. */
+export const BLOCK_TYPE_LIGHT: readonly number[] = BLOCK_TYPE_TO_ID.map((id) =>
+  id ? (BLOCK_DEFINITIONS[id].texture.lightEmission ?? 0) : 0,
+);
+
+/** Surface albedo color (0xRRGGBB) per numeric block type, for light bounces. */
+export const BLOCK_TYPE_ALBEDO: readonly number[] = BLOCK_TYPE_TO_ID.map((id) =>
+  id ? BLOCK_DEFINITIONS[id].color : 0,
+);
+
+/** Emitted light color (0xRRGGBB) per numeric block type. */
+export const BLOCK_TYPE_EMISSION_COLOR: readonly number[] = BLOCK_TYPE_TO_ID.map((id) =>
+  id ? (BLOCK_DEFINITIONS[id].emissionColor ?? BLOCK_DEFINITIONS[id].color) : 0,
+);

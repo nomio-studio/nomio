@@ -1,13 +1,35 @@
 import * as THREE from "three";
 import { DEFAULT_BLOCK_REGISTRY, type BlockRegistry } from "./block-registry";
 import { BLOCK_TYPE_TO_ID } from "./blocks";
-import { CHUNK_MIN_Y, CHUNK_SIZE, chunkKey, type VoxelChunk } from "./chunk-types";
-import { buildGreedyMesh, type GreedyQuad } from "./greedy-mesher";
+import {
+  CHUNK_MIN_Y,
+  CHUNK_SIZE,
+  chunkCoordinate,
+  chunkKey,
+  type ChunkCoordinate,
+  type ChunkMeshBuffers,
+} from "./chunk-types";
 import { BlockTextureAtlas } from "./texture-atlas";
+import type { TextureFace } from "./texture-types";
 import type { BlockTarget } from "./types";
-import type { VoxelWorld } from "./world";
+import type { FogController } from "./fog";
+import type { GlobalIllumination } from "./global-illumination";
+import { ACCENT_COLOR } from "../ui/tokens";
 
 const TARGET_EPSILON = 0.001;
+const FACE_BY_INDEX: readonly TextureFace[] = ["side", "top", "bottom"];
+// Ambient occlusion brightness per AO level (0 = most occluded). Kept gentle so
+// creases read as soft contact shadows instead of black trenches.
+const AO_SHADE: readonly number[] = [0.72, 0.83, 0.93, 1.0];
+// Baked sky/block light is applied to indirect (ambient) light only, so direct
+// sunlight never goes pitch black; this sets the darkest ambient fraction.
+const AMBIENT_FLOOR = 0.6;
+
+export interface VoxelWorldRendererOptions {
+  shadowChunkRadius?: number;
+  fog?: FogController | null;
+  gi?: GlobalIllumination | null;
+}
 
 export class VoxelWorldRenderer {
   private readonly group = new THREE.Group();
@@ -16,19 +38,29 @@ export class VoxelWorldRenderer {
   private readonly textureAtlas: BlockTextureAtlas;
   private readonly chunkMeshes = new Map<string, THREE.Mesh>();
   private readonly materials: THREE.MeshStandardMaterial[];
+  private readonly shadowChunkRadius: number;
+  private focus: ChunkCoordinate | null = null;
 
   public constructor(
     private readonly scene: THREE.Scene,
-    private readonly world: VoxelWorld,
     private readonly registry: BlockRegistry = DEFAULT_BLOCK_REGISTRY,
+    options: VoxelWorldRendererOptions = {},
   ) {
+    this.shadowChunkRadius = options.shadowChunkRadius ?? 3;
     this.group.name = "voxel-world";
     this.scene.add(this.group);
 
-    this.textureAtlas = new BlockTextureAtlas(registry);
-    this.materials = registry.ids.map((id) => this.textureAtlas.getMaterial(id));
+    this.textureAtlas = new BlockTextureAtlas(
+      this.registry,
+      options.fog ?? null,
+      options.gi ?? null,
+    );
+    this.materials = [...this.textureAtlas.materials];
 
-    const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xf27b63, transparent: true });
+    const highlightMaterial = new THREE.LineBasicMaterial({
+      color: ACCENT_COLOR,
+      transparent: true,
+    });
     this.highlight = new THREE.LineSegments(
       new THREE.EdgesGeometry(this.blockGeometry),
       highlightMaterial,
@@ -37,30 +69,70 @@ export class VoxelWorldRenderer {
     this.highlight.scale.setScalar(1.04);
     this.highlight.visible = false;
     this.scene.add(this.highlight);
-
-    this.sync();
   }
 
-  public sync(): void {
+  /** Applies a precomputed chunk mesh, building its GPU geometry on the main thread. */
+  public applyMesh(coordinate: ChunkCoordinate, mesh: ChunkMeshBuffers): void {
+    const key = chunkKey(coordinate);
+    const geometry = this.createGeometry(mesh);
+    const existing = this.chunkMeshes.get(key);
+
+    if (existing) {
+      existing.geometry.dispose();
+      if (geometry) {
+        existing.geometry = geometry;
+      } else {
+        this.group.remove(existing);
+        this.chunkMeshes.delete(key);
+      }
+      return;
+    }
+
+    if (!geometry) {
+      return;
+    }
+
+    const object = new THREE.Mesh(geometry, this.materials);
+    object.position.set(coordinate.x * CHUNK_SIZE, CHUNK_MIN_Y, coordinate.z * CHUNK_SIZE);
+    object.castShadow = this.isShadowCaster(coordinate);
+    object.receiveShadow = true;
+    object.frustumCulled = true;
+    object.matrixAutoUpdate = false;
+    object.updateMatrix();
+    this.group.add(object);
+    this.chunkMeshes.set(key, object);
+  }
+
+  public removeChunk(coordinate: ChunkCoordinate): void {
+    const key = chunkKey(coordinate);
+    const mesh = this.chunkMeshes.get(key);
+    if (!mesh) {
+      return;
+    }
+    mesh.geometry.dispose();
+    this.group.remove(mesh);
+    this.chunkMeshes.delete(key);
+  }
+
+  public clear(): void {
     for (const mesh of this.chunkMeshes.values()) {
       mesh.geometry.dispose();
       this.group.remove(mesh);
     }
     this.chunkMeshes.clear();
+  }
 
-    this.world.forEachChunk((chunk) => {
-      const geometry = this.createChunkGeometry(chunk);
-      if (!geometry) {
-        return;
-      }
-
-      const mesh = new THREE.Mesh(geometry, this.materials);
-      mesh.position.set(chunk.x * CHUNK_SIZE, CHUNK_MIN_Y, chunk.z * CHUNK_SIZE);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.group.add(mesh);
-      this.chunkMeshes.set(chunkKey(chunk), mesh);
-    });
+  /** Moves the shadow-casting band and returns true when the focus chunk changed. */
+  public setShadowFocus(position: { x: number; z: number }): boolean {
+    const next = { x: chunkCoordinate(position.x), z: chunkCoordinate(position.z) };
+    if (this.focus && this.focus.x === next.x && this.focus.z === next.z) {
+      return false;
+    }
+    this.focus = next;
+    for (const [key, mesh] of this.chunkMeshes) {
+      mesh.castShadow = this.isShadowCaster(parseChunkKey(key));
+    }
+    return true;
   }
 
   public pick(raycaster: THREE.Raycaster): BlockTarget | null {
@@ -100,10 +172,7 @@ export class VoxelWorldRenderer {
   }
 
   public dispose(): void {
-    for (const mesh of this.chunkMeshes.values()) {
-      mesh.geometry.dispose();
-    }
-    this.chunkMeshes.clear();
+    this.clear();
     this.blockGeometry.dispose();
     this.highlight.geometry.dispose();
     (this.highlight.material as THREE.Material).dispose();
@@ -111,73 +180,122 @@ export class VoxelWorldRenderer {
     this.scene.remove(this.group, this.highlight);
   }
 
-  private createChunkGeometry(chunk: VoxelChunk): THREE.BufferGeometry | null {
-    const mesh = buildGreedyMesh(chunk, (x, y, z) => this.world.getBlockType({ x, y, z }));
-    if (mesh.quads.length === 0) {
+  private isShadowCaster(coordinate: ChunkCoordinate): boolean {
+    if (!this.focus) {
+      return true;
+    }
+    return (
+      Math.max(Math.abs(coordinate.x - this.focus.x), Math.abs(coordinate.z - this.focus.z)) <=
+      this.shadowChunkRadius
+    );
+  }
+
+  private createGeometry(mesh: ChunkMeshBuffers): THREE.BufferGeometry | null {
+    if (mesh.quadCount === 0) {
       return null;
     }
 
     const positions: number[] = [];
     const normals: number[] = [];
     const uvs: number[] = [];
+    const lights: number[] = [];
+    const indirects: number[] = [];
     const indices: number[] = [];
-    const groups = new Map<number, { start: number; count: number }>();
-    const quadsByMaterial = new Map<number, GreedyQuad[]>();
+    const buckets = new Map<number, number[]>();
 
-    for (const quad of mesh.quads) {
-      const id = BLOCK_TYPE_TO_ID[quad.blockType];
+    for (let quad = 0; quad < mesh.quadCount; quad += 1) {
+      const id = BLOCK_TYPE_TO_ID[mesh.blockType[quad]];
       if (!id) {
         continue;
       }
-      const materialIndex = this.registry.indexOf(id);
-      if (materialIndex < 0) {
-        throw new Error(`Block ${id} is missing from the renderer registry`);
+      const materialIndex = this.textureAtlas.getMaterialIndex(id);
+      const bucket = buckets.get(materialIndex);
+      if (bucket) {
+        bucket.push(quad);
+      } else {
+        buckets.set(materialIndex, [quad]);
       }
-      const bucket = quadsByMaterial.get(materialIndex) ?? [];
-      bucket.push(quad);
-      quadsByMaterial.set(materialIndex, bucket);
-    }
-
-    for (const [materialIndex, quads] of quadsByMaterial) {
-      const start = indices.length;
-      for (const quad of quads) {
-        this.appendQuad(quad, BLOCK_TYPE_TO_ID[quad.blockType]!, positions, normals, uvs, indices);
-      }
-      groups.set(materialIndex, { start, count: indices.length - start });
     }
 
     const geometry = new THREE.BufferGeometry();
+    for (const [materialIndex, quads] of buckets) {
+      const start = indices.length;
+      for (const quad of quads) {
+        this.appendQuad(quad, mesh, positions, normals, uvs, lights, indirects, indices);
+      }
+      geometry.addGroup(start, indices.length - start, materialIndex);
+    }
+
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
     geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setAttribute("aLight", new THREE.Float32BufferAttribute(lights, 2));
+    geometry.setAttribute("aIndirect", new THREE.Float32BufferAttribute(indirects, 3));
     geometry.setIndex(indices);
-    for (const [materialIndex, group] of groups) {
-      geometry.addGroup(group.start, group.count, materialIndex);
-    }
     geometry.computeBoundingSphere();
     return geometry;
   }
 
   private appendQuad(
-    quad: GreedyQuad,
-    id: NonNullable<(typeof BLOCK_TYPE_TO_ID)[number]>,
+    quad: number,
+    mesh: ChunkMeshBuffers,
     positions: number[],
     normals: number[],
     uvs: number[],
+    lights: number[],
+    indirects: number[],
     indices: number[],
   ): void {
-    const tile = this.textureAtlas.getFaceUv(id, quad.textureFace);
-    const baseIndex = positions.length / 3;
-    const vertices: readonly [number, number, number][] = [
-      this.quadVertex(quad, 0, 0),
-      this.quadVertex(quad, 1, 0),
-      this.quadVertex(quad, 1, 1),
-      this.quadVertex(quad, 0, 1),
-    ];
-    for (const vertex of vertices) {
-      positions.push(...vertex);
-      normals.push(...quad.normal);
+    const id = BLOCK_TYPE_TO_ID[mesh.blockType[quad]];
+    if (!id) {
+      return;
     }
+    const tile = this.textureAtlas.getFaceUv(id, FACE_BY_INDEX[mesh.textureFace[quad]]);
+
+    const o = quad * 3;
+    const originX = mesh.origin[o];
+    const originY = mesh.origin[o + 1];
+    const originZ = mesh.origin[o + 2];
+    const uX = mesh.u[o] * mesh.width[quad];
+    const uY = mesh.u[o + 1] * mesh.width[quad];
+    const uZ = mesh.u[o + 2] * mesh.width[quad];
+    const vX = mesh.v[o] * mesh.height[quad];
+    const vY = mesh.v[o + 1] * mesh.height[quad];
+    const vZ = mesh.v[o + 2] * mesh.height[quad];
+
+    const baseIndex = positions.length / 3;
+    positions.push(
+      originX,
+      originY,
+      originZ,
+      originX + uX,
+      originY + uY,
+      originZ + uZ,
+      originX + uX + vX,
+      originY + uY + vY,
+      originZ + uZ + vZ,
+      originX + vX,
+      originY + vY,
+      originZ + vZ,
+    );
+
+    const normalX = mesh.normal[o];
+    const normalY = mesh.normal[o + 1];
+    const normalZ = mesh.normal[o + 2];
+    normals.push(
+      normalX,
+      normalY,
+      normalZ,
+      normalX,
+      normalY,
+      normalZ,
+      normalX,
+      normalY,
+      normalZ,
+      normalX,
+      normalY,
+      normalZ,
+    );
 
     uvs.push(
       tile.u,
@@ -189,14 +307,23 @@ export class VoxelWorldRenderer {
       tile.u,
       tile.v + tile.height,
     );
+
+    // Per-vertex smooth lighting: AO darkness and propagated light, applied to
+    // indirect light in the shader so direct sun stays bright and shadows soften.
+    for (let corner = 0; corner < 4; corner += 1) {
+      const ao = AO_SHADE[mesh.ao[quad * 4 + corner]];
+      const light = AMBIENT_FLOOR + (1 - AMBIENT_FLOOR) * (mesh.light[quad * 4 + corner] / 15);
+      lights.push(ao, light);
+
+      const packed = mesh.indirect[quad * 4 + corner];
+      indirects.push(((packed >> 8) & 15) / 15, ((packed >> 4) & 15) / 15, (packed & 15) / 15);
+    }
+
     indices.push(baseIndex, baseIndex + 1, baseIndex + 2, baseIndex, baseIndex + 2, baseIndex + 3);
   }
-
-  private quadVertex(quad: GreedyQuad, u: number, v: number): [number, number, number] {
-    return [
-      quad.origin[0] + quad.u[0] * quad.width * u + quad.v[0] * quad.height * v,
-      quad.origin[1] + quad.u[1] * quad.width * u + quad.v[1] * quad.height * v,
-      quad.origin[2] + quad.u[2] * quad.width * u + quad.v[2] * quad.height * v,
-    ];
-  }
 }
+
+const parseChunkKey = (key: string): ChunkCoordinate => {
+  const [x, z] = key.split(",").map(Number);
+  return { x, z };
+};
