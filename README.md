@@ -27,7 +27,9 @@ npm run build
 - `Space`: hop
 - Left mouse button: mine the highlighted block
 - Right mouse button: place the selected block on the highlighted face
-- `1`, `2`, `3`: select lichen, stone, or crystal
+- `1`–`0`, `-`, `=`: select the first twelve materials
+- `[` / `]`: cycle through all materials
+- Click a material swatch in the palette to select any block
 - Mobile: drag the world to look, use the directional pad to move, and use Mine / Place buttons
 
 ## Architecture
@@ -41,6 +43,8 @@ src/
 │   ├── input.ts           # Keyboard, mouse, touch, and virtual controls
 │   ├── interactor.ts      # Raycast targeting and break/place actions
 │   ├── player.ts          # First-person look, movement, gravity, collision
+│   ├── procedural-textures.ts # Deterministic 64×64 CanvasTexture factory
+│   ├── texture-types.ts   # Texture recipe and face contracts
 │   ├── types.ts           # Shared voxel and game contracts
 │   ├── world.ts           # Data-first voxel storage and AABB queries
 │   ├── world-generator.ts # Deterministic starter island
@@ -50,6 +54,8 @@ src/
 ├── main.ts                # Composition root and render loop
 └── style.css              # Responsive field-note interface
 ```
+
+Every block definition declares a palette, seed, pattern, and material properties. The procedural texture registry turns that recipe into separate 64×64 top, side, and bottom `CanvasTexture` maps with nearest filtering, then the renderer applies them to Three.js box faces. Register a new drawer with `registerTexturePattern()` and reference it from a block recipe without changing the renderer.
 
 The world currently renders one mesh per block. That keeps the MVP easy to understand and leaves a clear seam for chunk meshing, texture atlases, persistence, or procedural generators in a later iteration.
 

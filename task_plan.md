@@ -1,33 +1,34 @@
-# Task Plan: nomio voxel game MVP
+# Task Plan: nomio procedural block textures
 
 ## Goal
 
-Turn the Vite starter into a playable, modular browser-based voxel game MVP built with TypeScript, HTML/CSS, and Three.js.
+Extend the playable nomio voxel game with an extensible procedural texture system that generates refined Minecraft-like 64×64 block textures for at least a dozen basic materials.
 
 ## Phases
 
-- [x] Phase 1: Audit the starter and define the MVP architecture
-- [x] Phase 2: Build the voxel world, player controller, interaction loop, and HUD
-- [x] Phase 3: Add visual polish, responsive controls, and game feedback
-- [x] Phase 4: Verify quality gates, document the game, and commit atomic changes
+- [x] Phase 1: Audit current block/material seams and design the procedural texture contracts
+- [x] Phase 2: Implement deterministic 64×64 texture generation and face-aware material sets
+- [x] Phase 3: Expand the block catalog to a dozen-plus materials and expose it in gameplay
+- [ ] Phase 4: Verify visual/runtime integration, quality gates, documentation, and atomic commits
 
 ## Key Questions
 
-1. What is the smallest complete loop that feels like a voxel game: move, look, target, remove, place, and reset?
-2. How can world state and rendering stay separable so new blocks and world generators are easy to add?
-3. Which desktop and touch interactions are clear without introducing a large UI surface?
+1. How can new block textures be registered without modifying the renderer?
+2. Which deterministic pattern families cover natural, crafted, transparent, and ore materials?
+3. How do 64×64 face textures preserve crisp pixel character while still looking refined at runtime?
 
 ## Decisions Made
 
-- Use a data-first `VoxelWorld` with string-keyed block storage and a renderer that mirrors world state.
-- Use first-person pointer-lock controls for desktop, with a simple touch/look fallback for smaller screens.
-- Use a small warm mineral palette and compact system UI so the world remains the visual focus.
-- Keep the MVP dependency-light: Three.js only, with no external textures or backend.
+- Keep the data-first `VoxelWorld` and separate block definitions from rendering.
+- Describe each block with a `TextureRecipe` containing pattern, palette, seed, and material properties.
+- Register procedural pattern drawers in a map so texture families can be added independently of the factory.
+- Generate separate top, side, and bottom CanvasTextures at `64 × 64`, using nearest filtering for pixel clarity.
+- Keep the dependency-light approach: browser Canvas + Three.js, with no downloaded image assets.
 
 ## Errors Encountered
 
-- The sandbox initially denied binding the Vite server to localhost; an approved elevated run served the entrypoint successfully.
+- Previous MVP work is complete and provides the integration baseline.
 
 ## Status
 
-**Complete** - Gameplay, visual direction, responsive touch controls, documentation, quality checks, and atomic commits are complete.
+**Currently in Phase 4** - The 64×64 texture factory, 17-block catalog, renderer integration, and docs are complete; final verification and atomic commit remain.
