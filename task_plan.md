@@ -1,33 +1,36 @@
-# Task Plan: nomio maintainability refactor
+# Task Plan: nomio terrain generation and meshing
 
 ## Goal
 
-Refactor the current nomio voxel game into a standardized, highly modular runtime that is easy to maintain, test, and extend without changing the game’s behavior.
+Develop and integrate a mature chunked terrain pipeline using OpenSimplex2 + fBm heightmaps, Uint8Array voxel storage, worker generation with transferable buffers, greedy meshing, and face culling.
 
 ## Phases
 
-- [x] Phase 1: Map current coupling and define refactor boundaries
-- [x] Phase 2: Extract application composition, scene runtime, and game configuration
-- [x] Phase 3: Introduce registries, lifecycle cleanup, and reusable service contracts
-- [x] Phase 4: Verify behavior, update documentation, and create atomic commits
+- [x] Phase 1: Define chunk, numeric block, terrain, and worker contracts
+- [x] Phase 2: Implement OpenSimplex2 fBm heightmap generation in a worker
+- [x] Phase 3: Replace world storage and renderer with chunk Uint8Array + greedy meshing
+- [x] Phase 4: Integrate async loading, player collision, interaction, and reset behavior
+- [x] Phase 5: Verify runtime, visual output, performance seams, documentation, and atomic commits
 
 ## Key Questions
 
-1. Which modules should own lifecycle, configuration, data, rendering, input, and UI concerns?
-2. How can custom block registries and game configuration be injected without global imports?
-3. Can every event-driven service be disposed cleanly for tests, hot reload, and future scene switching?
+1. Which chunk coordinate and voxel index contracts keep worker, world, and mesher data-compatible?
+2. How should OpenSimplex2 and fBm parameters map to stable, playable block heights?
+3. How can chunk-boundary neighbor lookups guarantee face culling without synchronous worker coupling?
+4. How can the async generator be disposed and restarted without stale worker results mutating the world?
 
 ## Decisions Made
 
-- Keep `main.ts` as a minimal browser bootstrap and move dependency wiring into an application layer.
-- Inject `BlockRegistry` and `GameConfig` into systems that currently import global constants or hard-code tuning.
-- Make input, HUD, scene runtime, and game session own explicit `dispose()` lifecycles.
-- Preserve the existing atlas, world, and player behavior while reducing per-frame allocations and duplicated wiring.
+- Preserve the previous modular application/session boundary while replacing only terrain and world-rendering internals.
+- Use fixed-size X/Z chunks and a bounded Y range so each chunk has a compact transferable `Uint8Array`.
+- Reserve voxel value `0` for air and keep block values stable through a centralized block-type mapping.
+- Generate a configurable 3×3 initial chunk window asynchronously, then rebuild affected meshes when neighbors arrive.
+- Use greedy meshing per visible face orientation and cull faces whose neighboring voxel is solid.
 
 ## Errors Encountered
 
-- The existing MVP and procedural atlas are the integration baseline.
+- The existing MVP and procedural atlas are the integration baseline; terrain work is replacing its Map/per-block-mesh path.
 
 ## Status
 
-**Complete** - The modular runtime is implemented, documented, browser-smoke-tested, and ready in atomic commits.
+**Complete** - The terrain pipeline is integrated, structurally verified, browser-smoke-tested, visually inspected, documented, and ready for commit.

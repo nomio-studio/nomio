@@ -43,18 +43,24 @@ src/
 ├── game/
 │   ├── block-registry.ts  # Injectable block definitions and ordering
 │   ├── blocks.ts          # Default block catalog
+│   ├── chunk-types.ts     # Chunk dimensions and transfer contracts
 │   ├── config.ts          # Injectable camera, player, input, and render tuning
 │   ├── game-session.ts    # Runtime composition, loop, selection, and reset
 │   ├── input.ts           # Keyboard, mouse, touch, and virtual controls
 │   ├── interactor.ts      # Raycast targeting and break/place actions
+│   ├── greedy-mesher.ts   # Face-culling greedy quad generation
+│   ├── open-simplex2.ts   # Dependency-free 2D OpenSimplex2 noise
 │   ├── player.ts          # First-person look, movement, gravity, collision
 │   ├── procedural-textures.ts # Deterministic 64×64 tile drawer library
-│   ├── texture-atlas.ts   # Shared atlas canvas, UV geometry, and materials
+│   ├── texture-atlas.ts   # Shared atlas canvas, UV tiles, and materials
 │   ├── texture-types.ts   # Texture recipe and face contracts
+│   ├── terrain-config.ts   # Seed, fBm, and heightmap tuning
+│   ├── terrain-generation.ts # Pure chunk heightmap and block layering
+│   ├── terrain-generation.worker.ts # Worker-side generation and buffer transfer
+│   ├── terrain-worker.ts   # Main-thread worker client
 │   ├── types.ts           # Shared voxel and game contracts
-│   ├── world.ts           # Data-first voxel storage and AABB queries
-│   ├── world-generator.ts # Deterministic starter island
-│   └── world-renderer.ts  # Three.js block meshes and target highlight
+│   ├── world.ts           # Chunked Uint8Array storage and AABB queries
+│   └── world-renderer.ts  # Greedy chunk meshes and target highlight
 ├── ui/
 │   ├── game-shell.ts      # Canvas and UI DOM shell
 │   └── hud.ts             # HUD, palette, prompt, and touch controls
@@ -64,20 +70,20 @@ src/
 
 `NomioApplication` owns the browser entrypoint and creates a disposable `GameSession`. The session composes the scene runtime, world, renderer, player, interactor, input, and HUD. `SceneRuntime` owns Three.js setup and resize handling; event-driven services expose `dispose()` so sessions can be restarted, tested, or replaced without leaking listeners.
 
-`BlockRegistry` is the catalog boundary. The HUD, atlas, renderer, and selection logic consume it instead of importing block order directly, so a session can provide a different catalog/order. `GameSession` also accepts `GameConfig` overrides and a world factory for tuning or test fixtures.
+`BlockRegistry` is the catalog boundary. The HUD, atlas, renderer, and selection logic consume it instead of importing block order directly, so a session can provide a different catalog/order. `GameSession` accepts `GameConfig` overrides, including terrain seed and fBm settings.
 
-Every block definition declares a palette, seed, pattern, and material properties. The procedural texture registry renders separate 64×64 top, side, and bottom tiles, and `BlockTextureAtlas` packs all tiles into one shared `CanvasTexture`, rewrites cached block UVs, and applies the atlas to Three.js meshes. Register a new drawer with `registerTexturePattern()` and reference it from a block recipe without changing the renderer.
+Every block definition declares a palette, seed, pattern, and material properties. The procedural texture registry renders separate 64×64 top, side, and bottom tiles, and `BlockTextureAtlas` packs all tiles into one shared `CanvasTexture`, exposes face UVs, and supplies shared Three.js materials to greedy chunk meshes. Register a new drawer with `registerTexturePattern()` and reference it from a block recipe without changing the renderer.
 
-The world currently renders one mesh per block. That keeps the MVP easy to understand and leaves a clear seam for chunk meshing, texture atlases, persistence, or procedural generators in a later iteration.
+Terrain is generated in 16×16×40 chunks. `TerrainWorker` requests chunks from a module Web Worker; the worker transfers each generated `Uint8Array.buffer` back without copying. The renderer builds one greedy-meshed Three.js geometry per loaded chunk, culls solid-neighbor faces, and groups quads by block material.
 
 ## Extension seams
 
 - Add block definitions in `src/game/blocks.ts` and expose their order through a `BlockRegistry`.
 - Add a texture family with `registerTexturePattern()` in `src/game/procedural-textures.ts`.
-- Give a new block a `TextureRecipe`; the atlas automatically creates its side, top, and bottom tiles and UV geometry.
-- Swap or compose terrain generators with `GameSessionOptions.worldFactory`.
+- Give a new block a `TextureRecipe`; the atlas automatically creates its side, top, and bottom tiles and exposes their UV bounds to the mesher.
 - Tune movement, camera, interaction, and rendering through `GameConfigOverrides`.
-- Replace the per-block renderer in `src/game/world-renderer.ts` with chunk meshing later.
+- Tune terrain seed, frequency, octaves, lacunarity, gain, base height, amplitude, and view distance through `GameConfigOverrides.terrain`.
+- Extend chunk loading in `src/game/game-session.ts` and `src/game/terrain-worker.ts` for streaming around the player.
 
 ## Git and quality
 
