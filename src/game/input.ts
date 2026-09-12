@@ -15,8 +15,6 @@ export interface InputOptions {
   onPointerLockChange?: (locked: boolean) => void;
 }
 
-export type MoveDirection = "forward" | "back" | "left" | "right";
-
 const BLOCK_HOTKEY_SLOTS: Readonly<Record<string, number>> = {
   Digit1: 0,
   Digit2: 1,
@@ -32,15 +30,29 @@ const BLOCK_HOTKEY_SLOTS: Readonly<Record<string, number>> = {
   Equal: 11,
 };
 
+const clampUnit = (value: number): number => Math.min(1, Math.max(-1, value));
+
+/**
+ * Unifies keyboard, mouse, pen, and touch into one polled `InputState`.
+ *
+ * Keyboard and pointer-lock mice feed the digital paths. Touch and pen feed the
+ * analog paths: a virtual stick supplies a continuous `moveX`/`moveZ`, and the
+ * first non-mouse pointer on the canvas drags the view. Every pointer is tracked
+ * by id and released on `pointerup`, `pointercancel`, blur, or tab hide, so a
+ * dropped finger can never leave the player walking forever.
+ */
 export class InputManager {
   private readonly listeners = new AbortController();
   private readonly keys = new Set<string>();
-  private readonly virtualMoves = new Set<MoveDirection>();
   private readonly actions: GameAction[] = [];
   private lookX = 0;
   private lookY = 0;
   private jump = false;
-  private touchPoint: { x: number; y: number } | null = null;
+  private moveX = 0;
+  private moveZ = 0;
+  private touchLookScale = 1;
+  private lookPointerId: number | null = null;
+  private readonly lookOrigin = { x: 0, y: 0 };
   private locked = false;
   private interactive = true;
 
@@ -56,7 +68,7 @@ export class InputManager {
   }
 
   /**
-   * Enables pointer-lock capture from canvas clicks. Disabled on the title and
+   * Enables pointer-lock capture from canvas presses. Disabled on the title and
    * loading screens so only the explicit start action begins play.
    */
   public setInteractive(interactive: boolean): void {
@@ -97,29 +109,40 @@ export class InputManager {
     this.locked = false;
   }
 
-  public setVirtualMove(direction: MoveDirection, active: boolean): void {
-    if (active) {
-      this.virtualMoves.add(direction);
-    } else {
-      this.virtualMoves.delete(direction);
+  /** Analog movement from the virtual stick, clamped to the unit circle. */
+  public setMoveVector(x: number, z: number): void {
+    const magnitude = Math.hypot(x, z);
+    if (magnitude > 1) {
+      this.moveX = x / magnitude;
+      this.moveZ = z / magnitude;
+      return;
     }
+    this.moveX = clampUnit(x);
+    this.moveZ = clampUnit(z);
+  }
+
+  /** Queues a jump, used by the on-screen jump button. */
+  public requestJump(): void {
+    this.jump = true;
+  }
+
+  /** Scales pointer deltas from touch/pen, so touch can feel distinct from mouse. */
+  public setTouchLookScale(scale: number): void {
+    this.touchLookScale = scale > 0 ? scale : 1;
   }
 
   public consume(): InputState {
-    const moveX =
-      Number(
-        this.keys.has("KeyD") || this.keys.has("ArrowRight") || this.virtualMoves.has("right"),
-      ) -
-      Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft") || this.virtualMoves.has("left"));
-    const moveZ =
-      Number(
-        this.keys.has("KeyW") || this.keys.has("ArrowUp") || this.virtualMoves.has("forward"),
-      ) -
-      Number(this.keys.has("KeyS") || this.keys.has("ArrowDown") || this.virtualMoves.has("back"));
+    const digitalX =
+      Number(this.keys.has("KeyD") || this.keys.has("ArrowRight")) -
+      Number(this.keys.has("KeyA") || this.keys.has("ArrowLeft"));
+    const digitalZ =
+      Number(this.keys.has("KeyW") || this.keys.has("ArrowUp")) -
+      Number(this.keys.has("KeyS") || this.keys.has("ArrowDown"));
+    const analog = this.moveX !== 0 || this.moveZ !== 0;
 
     const state: InputState = {
-      moveX,
-      moveZ,
+      moveX: analog ? this.moveX : digitalX,
+      moveZ: analog ? this.moveZ : digitalZ,
       lookX: this.lookX,
       lookY: this.lookY,
       jump: this.jump,
@@ -138,15 +161,16 @@ export class InputManager {
     window.addEventListener("keydown", this.handleKeyDown, { signal });
     window.addEventListener("keyup", this.handleKeyUp, { signal });
     window.addEventListener("blur", this.clear, { signal });
+    document.addEventListener("visibilitychange", this.handleVisibilityChange, { signal });
     document.addEventListener("pointerlockchange", this.handlePointerLockChange, { signal });
     document.addEventListener("mousemove", this.handleMouseMove, { signal });
 
-    this.canvas.addEventListener("click", this.handleCanvasClick, { signal });
+    this.canvas.addEventListener("pointerdown", this.handleCanvasPointerDown, { signal });
+    this.canvas.addEventListener("pointermove", this.handleCanvasPointerMove, { signal });
+    this.canvas.addEventListener("pointerup", this.handleCanvasPointerUp, { signal });
+    this.canvas.addEventListener("pointercancel", this.handleCanvasPointerUp, { signal });
     this.canvas.addEventListener("mousedown", this.handleMouseDown, { signal });
     this.canvas.addEventListener("contextmenu", this.preventContextMenu, { signal });
-    this.canvas.addEventListener("touchstart", this.handleTouchStart, { passive: false, signal });
-    this.canvas.addEventListener("touchmove", this.handleTouchMove, { passive: false, signal });
-    this.canvas.addEventListener("touchend", this.handleTouchEnd, { passive: false, signal });
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
@@ -170,14 +194,23 @@ export class InputManager {
     this.keys.delete(event.code);
   };
 
+  private readonly handleVisibilityChange = (): void => {
+    if (document.hidden) {
+      this.clear();
+    }
+  };
+
   private readonly clear = (): void => {
     this.keys.clear();
-    this.virtualMoves.clear();
     this.lookX = 0;
     this.lookY = 0;
     this.jump = false;
-    this.touchPoint = null;
+    this.moveX = 0;
+    this.moveZ = 0;
     this.actions.length = 0;
+    if (this.lookPointerId !== null) {
+      this.releaseLookPointer(this.lookPointerId);
+    }
   };
 
   private readonly handlePointerLockChange = (): void => {
@@ -193,11 +226,54 @@ export class InputManager {
     this.lookY += event.movementY;
   };
 
-  private readonly handleCanvasClick = (): void => {
-    if (this.interactive && !this.locked) {
-      void this.requestPointerLock();
+  private readonly handleCanvasPointerDown = (event: PointerEvent): void => {
+    if (event.pointerType === "mouse") {
+      if (this.interactive && !this.locked) {
+        void this.requestPointerLock();
+      }
+      return;
     }
+    if (this.lookPointerId !== null) {
+      return;
+    }
+
+    this.lookPointerId = event.pointerId;
+    this.lookOrigin.x = event.clientX;
+    this.lookOrigin.y = event.clientY;
+    try {
+      this.canvas.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort; dragging still works without it.
+    }
+    event.preventDefault();
   };
+
+  private readonly handleCanvasPointerMove = (event: PointerEvent): void => {
+    if (event.pointerId !== this.lookPointerId) {
+      return;
+    }
+    this.lookX += (event.clientX - this.lookOrigin.x) * this.touchLookScale;
+    this.lookY += (event.clientY - this.lookOrigin.y) * this.touchLookScale;
+    this.lookOrigin.x = event.clientX;
+    this.lookOrigin.y = event.clientY;
+    event.preventDefault();
+  };
+
+  private readonly handleCanvasPointerUp = (event: PointerEvent): void => {
+    if (event.pointerId !== this.lookPointerId) {
+      return;
+    }
+    this.releaseLookPointer(event.pointerId);
+  };
+
+  private releaseLookPointer(pointerId: number): void {
+    this.lookPointerId = null;
+    try {
+      this.canvas.releasePointerCapture(pointerId);
+    } catch {
+      // Capture may already have been released by the browser.
+    }
+  }
 
   private readonly handleMouseDown = (event: MouseEvent): void => {
     if (!this.locked) {
@@ -213,29 +289,5 @@ export class InputManager {
 
   private readonly preventContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
-  };
-
-  private readonly handleTouchStart = (event: TouchEvent): void => {
-    event.preventDefault();
-    const touch = event.touches[0];
-    if (touch) {
-      this.touchPoint = { x: touch.clientX, y: touch.clientY };
-    }
-  };
-
-  private readonly handleTouchMove = (event: TouchEvent): void => {
-    event.preventDefault();
-    const touch = event.touches[0];
-    if (!touch || !this.touchPoint) {
-      return;
-    }
-    this.lookX += touch.clientX - this.touchPoint.x;
-    this.lookY += touch.clientY - this.touchPoint.y;
-    this.touchPoint = { x: touch.clientX, y: touch.clientY };
-  };
-
-  private readonly handleTouchEnd = (event: TouchEvent): void => {
-    event.preventDefault();
-    this.touchPoint = null;
   };
 }

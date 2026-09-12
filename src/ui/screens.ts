@@ -56,6 +56,7 @@ export class LoadingScreen {
 export interface TitleScreenOptions {
   container: HTMLElement;
   onStart: () => void;
+  onWorlds: () => void;
   onSettings: () => void;
 }
 
@@ -63,6 +64,7 @@ export interface TitleScreenOptions {
 export class TitleScreen {
   private readonly listeners = new AbortController();
   private readonly root: HTMLElement;
+  private readonly world: HTMLElement;
 
   public constructor(options: TitleScreenOptions) {
     options.container.insertAdjacentHTML(
@@ -76,18 +78,25 @@ export class TitleScreen {
             Walk the island, collect its colours, and leave one small mark of your own.
             The island remembers.
           </p>
+          <p class="title-card__world" id="title-world" hidden></p>
           <div class="title-card__actions">
             <button class="button button--primary" id="start-game" type="button">
               Enter the island <span aria-hidden="true">↗</span>
             </button>
+            <button class="button button--ghost" id="title-worlds" type="button">Worlds</button>
             <button class="button button--ghost" id="title-settings" type="button">Settings</button>
           </div>
           <dl class="controls-list" aria-label="Controls">
-            <div><dt><kbd>WASD</kbd></dt><dd>Walk</dd></div>
-            <div><dt><kbd>Space</kbd></dt><dd>Hop</dd></div>
-            <div><dt><kbd>LMB</kbd> / <kbd>RMB</kbd></dt><dd>Mine / place</dd></div>
-            <div><dt><kbd>1–0</kbd></dt><dd>Choose a material</dd></div>
-            <div><dt><kbd>Esc</kbd></dt><dd>Pause</dd></div>
+            <div class="controls-list__pointer"><dt><kbd>WASD</kbd></dt><dd>Walk</dd></div>
+            <div class="controls-list__pointer"><dt><kbd>Space</kbd></dt><dd>Hop</dd></div>
+            <div class="controls-list__pointer"><dt><kbd>LMB</kbd> / <kbd>RMB</kbd></dt><dd>Mine / place</dd></div>
+            <div class="controls-list__pointer"><dt><kbd>1–0</kbd></dt><dd>Choose a material</dd></div>
+            <div class="controls-list__pointer"><dt><kbd>Esc</kbd></dt><dd>Pause</dd></div>
+            <div class="controls-list__touch"><dt>Stick</dt><dd>Move</dd></div>
+            <div class="controls-list__touch"><dt>Drag</dt><dd>Look around</dd></div>
+            <div class="controls-list__touch"><dt>Mine · Place · Jump</dt><dd>On-screen buttons</dd></div>
+            <div class="controls-list__touch"><dt>Palette</dt><dd>Tap a material</dd></div>
+            <div class="controls-list__touch"><dt>Pause</dt><dd>Top-right button</dd></div>
           </dl>
         </div>
       </section>
@@ -95,10 +104,16 @@ export class TitleScreen {
     );
 
     this.root = requireElement<HTMLElement>(options.container, "#screen-title");
+    this.world = requireElement<HTMLElement>(this.root, "#title-world");
     const { signal } = this.listeners;
     requireElement<HTMLButtonElement>(this.root, "#start-game").addEventListener(
       "click",
       options.onStart,
+      { signal },
+    );
+    requireElement<HTMLButtonElement>(this.root, "#title-worlds").addEventListener(
+      "click",
+      options.onWorlds,
       { signal },
     );
     requireElement<HTMLButtonElement>(this.root, "#title-settings").addEventListener(
@@ -110,6 +125,12 @@ export class TitleScreen {
 
   public setVisible(visible: boolean): void {
     this.root.hidden = !visible;
+  }
+
+  /** Shows the loaded world and save above the primary action. */
+  public setWorldLabel(label: string): void {
+    this.world.textContent = label;
+    this.world.hidden = label.length === 0;
   }
 
   public focusPrimary(): void {

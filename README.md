@@ -18,7 +18,11 @@ npm run typecheck
 npm run lint
 npm run format:check
 npm run build
+npm run bench:voxel-format
+npm run test:saves
 ```
+
+`bench:voxel-format` round-trips every codec and compares NSVF against `node:zlib` gzip on representative terrain, edits, caves, and noise. `test:saves` drives the `SaveSystem` and per-save `WorldPersistence` on an in-memory driver to verify multiple worlds, multiple save slots, duplication, deletion, round-tripping, fingerprint invalidation, and clearing.
 
 ## Controls
 
@@ -31,7 +35,7 @@ npm run build
 - `[` / `]`: cycle through all materials
 - `Esc`: pause (Resume, Settings, Reset, Return to title)
 - Click a material swatch in the palette to select any block
-- Mobile: drag the world to look, use the directional pad to move, and use Mine / Place buttons
+- Touch: a floating analog stick moves, dragging elsewhere looks, and the Mine / Place / Jump buttons act on the aimed block; tap a material to select it
 
 ## Architecture
 
@@ -54,7 +58,7 @@ src/
 │   ├── fog.ts             # Height + inscattering atmosphere uniforms
 │   ├── game-session.ts    # Runtime composition, loop, selection, and reset
 │   ├── global-illumination.ts # Sky-driven tint for the baked indirect bounce
-│   ├── input.ts           # Keyboard, mouse, touch, and virtual controls
+│   ├── input.ts           # Keyboard, mouse, and pointer/touch look and movement
 │   ├── interactor.ts      # Raycast targeting and break/place actions
 │   ├── greedy-mesher.ts   # Face-culling greedy quad generation
 │   ├── open-simplex2.ts   # Dependency-free 2D OpenSimplex2 noise
@@ -67,7 +71,11 @@ src/
 │   ├── terrain-generation.ts # Pure chunk heightmap and block layering
 │   ├── terrain-generation.worker.ts # Worker-side generation and meshing
 │   ├── terrain-worker.ts   # Pool of worker clients for generation and meshing
+│   ├── save-system.ts     # World (map) and save-slot catalog over storage
+│   ├── storage.ts         # Path-based OPFS/localStorage/memory drivers
 │   ├── types.ts           # Shared voxel and game contracts
+│   ├── voxel-format.ts    # NSVF chunk codecs, region and archive containers
+│   ├── voxel-store.ts     # Debounced per-save world persistence
 │   ├── world.ts           # Chunked Uint8Array storage and AABB queries
 │   └── world-renderer.ts  # Incremental chunk meshes and target highlight
 ├── ui/
@@ -75,16 +83,18 @@ src/
 │   ├── dom.ts             # Small DOM, formatting, and tab-order helpers
 │   ├── game-shell.ts      # Canvas and UI DOM shell
 │   ├── hud.ts             # In-game HUD, palette, and touch controls
+│   ├── library.ts         # Worlds/saves library dialog
 │   ├── screens.ts         # Loading and title screens
 │   ├── settings.ts        # Persisted UI settings and normalization
 │   ├── toasts.ts          # Transient action feedback
 │   ├── tokens.ts          # Shared palette/three.js color tokens
+│   ├── touch-controls.ts  # Analog stick and Mine / Place / Jump buttons
 │   └── ui.ts              # Screen state machine and UI composition
 ├── main.ts                # Minimal browser bootstrap
 └── style.css              # Responsive field-note interface
 ```
 
-`NomioApplication` owns the browser entrypoint and creates a disposable `GameSession`. The session composes the scene runtime, world, renderer, player, interactor, input, and HUD. `SceneRuntime` owns Three.js setup and resize handling; event-driven services expose `dispose()` so sessions can be restarted, tested, or replaced without leaking listeners.
+`NomioApplication` owns the browser entrypoint, the persistent UI, and the storage driver. It resolves a world (map) and save slot through `SaveSystem`, then creates a disposable `GameSession` for that save and swaps it when the player opens another one. The session composes the scene runtime, world, renderer, player, interactor, input, and HUD. `SceneRuntime` owns Three.js setup and resize handling; event-driven services expose `dispose()` so sessions can be restarted, tested, or replaced without leaking listeners.
 
 `BlockRegistry` is the catalog boundary. The HUD, atlas, renderer, and selection logic consume it instead of importing block order directly, so a session can provide a different catalog/order. `GameSession` accepts `GameConfig` overrides, including terrain seed and fBm settings.
 
@@ -92,9 +102,15 @@ Every block definition declares a palette, seed, pattern, and material propertie
 
 The world sits under a dynamic sky. `SceneRuntime` advances a configurable day/night cycle, and `DynamicSky` renders an inverted sphere with a shader gradient: day and night zenith colors, a warm sunrise/sunset glow around the sun, a sun disk and halo, drifting noise clouds, and twinkling stars after dusk. `SkyPalette` derives every color from the sun's elevation, so the sky dome, directional sun light, hemisphere light, and fog color always agree. The sun light tracks the cycle around the player, and the shadow map refreshes only a few times per second to keep the moving sun cheap.
 
+Player edits are durable through the **Nomio Voxel Storage Format (NSVF)**, a purpose-built, dependency-free format in `src/game/voxel-format.ts`. Every 16×16×40 chunk is encoded independently by trying a family of voxel-aware codecs and keeping the smallest; a one-byte tag selects the codec on decode. The codecs are `constant`, palette `bitpack`, `RLE`, `column-dict` (deduplicated vertical columns), `surface-profile` (a shared layer profile plus one surface height per column), `sparse` (only cells that differ from a baseline), and canonical `Huffman`. Chunks group into 32×32 regions (magic `NVRG`) that carry block/generator fingerprints and a per-chunk CRC32 directory for random access and corruption detection, and regions group into a single seekable archive (magic `NSVF`).
+
+Storage is layered so the codec never touches a browser API. `src/game/storage.ts` exposes a path-based `StorageDriver` (`read`/`write`/`delete`/`list`/`removeDirectory`) with `OpfsStorageDriver` (default), `LocalStorageStorageDriver`, and `MemoryStorageDriver`; `createDefaultStorageDriver()` picks the most durable available, requiring a secure context for OPFS. On top of it, `src/game/save-system.ts` defines the library model: a **world (map)** owns a terrain definition (seed and shape) and any number of **save slots**, stored as `catalog.json`, `maps/<mapId>/saves.json`, and `maps/<mapId>/saves/<saveId>/regions/<x>,<z>.nvrg`. `src/game/voxel-store.ts` then wires `WorldPersistence` to a single save root, storing edited chunks as `sparse` deltas against the deterministic terrain generator so untouched world costs nothing and a save is typically a few hundred bytes. The block catalog and terrain parameters are fingerprinted, so a stale save is discarded after a generator change; saves are debounced (600 ms), restored before streaming begins, and cleared on reset. `SaveSystem` also updates each save's edit count and timestamp after an autosave, which the library shows.
+
 Chunks are shaded with smooth lighting and vertex ambient occlusion. Before a chunk is meshed, `chunk-lighting.ts` copies it plus its eight horizontal neighbors into a padded volume and propagates sky light (from vertically exposed cells) and emitted block light (`lightEmission`, e.g. crystal) through air with one level lost per step. The greedy mesher samples the three blocks around every face corner for the classic four-level AO term and averages nearby light levels, then merges cells only when their block type, AO, and light all match. `VoxelWorldRenderer` bakes the result into a per-vertex `aLight` attribute (AO and light), which a small standard-material patch multiplies into the **indirect** lighting only — direct sun keeps its full strength, so recesses become soft contact shadows instead of pitch black. Block edits flag their chunk dirty and relight the surrounding 3×3 chunk neighborhood, and every chunk load/unload re-meshes all eight neighbors so AO/light never seams across chunk borders.
 
-The interface has its own state machine (`src/ui/ui.ts`) with four states — loading, title, playing, and paused — that drives which screen is visible and keeps the gameplay layer free of DOM code. `GameSession` talks to `GameUi`, which composes the loading screen, title, HUD, native `<dialog>` pause/settings/reset surfaces, and a polite toast region. Settings (look sensitivity, field of view, invert look, control hints, reduced motion) are normalized, persisted to `localStorage`, and applied live; every command has a keyboard path, focus moves into dialogs and returns on close, the hotbar uses a roving tabindex, and game feedback appears as transient toasts. The stylesheet declares the palette as custom properties and honors `prefers-reduced-motion`, `prefers-reduced-transparency`, and `prefers-contrast`.
+The interface has its own state machine (`src/ui/ui.ts`) with four states — loading, title, playing, and paused — that drives which screen is visible and keeps the gameplay layer free of DOM code. An application-owned `GameUi` composes the loading screen, title, HUD, native `<dialog>` pause/settings/reset surfaces, a polite toast region, and the **worlds/saves library** (`src/ui/library.ts`), from which the player creates, renames, duplicates, deletes, and opens worlds and saves. `GameSession` posts state to `GameUi` and subscribes to it but never owns it, which lets the application swap sessions without rebuilding the interface. Settings (look sensitivity, touch sensitivity, field of view, invert look, control hints, reduced motion) are normalized, persisted to `localStorage`, and applied live; every command has a keyboard path, focus moves into dialogs and returns on close, the hotbar uses a roving tabindex, and game feedback appears as transient toasts. The stylesheet declares the palette as custom properties and honors `prefers-reduced-motion`, `prefers-reduced-transparency`, and `prefers-contrast`.
+
+Touch devices are detected from `navigator.maxTouchPoints` (falling back to the coarse-pointer query) and the UI is marked `is-touch`, which reveals `src/ui/touch-controls.ts` instead of the keyboard hints. Movement is a floating analog stick: touching anywhere in the left zone drops the base under the thumb and emits a dead-zoned, magnitude-preserving vector, so a half-push walks slowly. `InputManager` tracks the first non-mouse pointer on the canvas by id for look, scaled by a separate touch sensitivity, while any number of other pointers drive the stick and buttons, so both thumbs work at once. Mine and Place fire on press and repeat while held, Jump is a single action, every pointer has `touch-action: none` and pointer capture, and blur, `visibilitychange`, and `pointercancel` all release inputs so a dropped finger can never leave the player walking. The layout respects `env(safe-area-inset-*)` for notches and home indicators, and pointer lock is skipped entirely on touch.
 
 Anti-aliasing runs through `RenderPipeline`. The scene renders into a linear HDR target from a camera jittered by a Halton(2,3) sequence; a temporal pass reprojects the previous resolved frame using depth and the camera matrices, variance-clips the history in YCoCg to remove ghosting without smearing, and scales the history weight down as motion grows. A final composite applies a clamped unsharp mask (to counter temporal softness), exposure, tone mapping, and the sRGB encode. Sky pixels are reprojected as directions so the rotating skybox does not smear. History resets on teleport, world reset, time-of-day jumps, and player edits. Tone mapping moved out of the materials and into the composite, so the scene pass stays in linear HDR; when the pipeline is disabled or WebGL2 is unavailable, rendering falls back to the direct tone-mapped path.
 
@@ -127,6 +143,7 @@ Terrain is generated in 16×16×40 chunks and is effectively endless, with a def
 - **Frustum + distance culling + fog**: each chunk mesh has its own bounding sphere and is frustum-culled by Three.js; chunks past the streaming distance are unloaded (distance culling), and camera far plane plus fog scale with `terrain.viewDistance` so the boundary stays hidden.
 - **Smooth lighting + vertex AO**: light propagation and AO are computed in the worker and baked into one per-vertex `aLight` attribute; a material patch applies it to indirect light only, so greedy merges still collapse flat regions and direct sun never crushes shadows to black.
 - **Shadow quality**: the sun shadow uses a 2048² map over a tight ±40 frustum with `normalBias` and soft PCF, and the sun follows the player in small timed steps so shadows neither shimmer nor leak around block edges.
+- **Voxel-aware persistence**: NSVF picks the smallest per-chunk codec and stores saves as generator-relative deltas, so structured terrain chunks are about 2× smaller than gzip and an edited-world save is about 47× smaller.
 - The streamed window is circular, cutting roughly 27% of the chunks a square window would load at the same radius.
 - Chunk meshes are uploaded under `render.meshBudgetMs` per frame, nearest-first, so frame time stays bounded while the world fills in.
 - Shadow maps use `autoUpdate = false` and refresh only when geometry changes or the shadow focus moves; only chunks within `render.shadowChunkRadius` cast shadows.
@@ -144,9 +161,9 @@ Terrain is generated in 16×16×40 chunks and is effectively endless, with a def
 - Tune global illumination through `GameConfigOverrides.lighting`; extend `chunk-lighting.ts` with additional bounces or a per-block albedo texture for richer color bleeding.
 - Tune the grade through `GameConfigOverrides.grading` or `SceneRuntime.setGrading()`; add filmic stages (lift/gamma/gain, split toning, LUTs) in the composite's `applyGrade`.
 - Tune streaming concurrency and the unload hysteresis band through `ChunkStreamerOptions`.
-- Add a screen or dialog by extending the `UiState` union in `src/ui/ui.ts` and composing a component in `src/ui/screens.ts` or `src/ui/dialogs.ts`.
+- Add a screen or dialog by extending the `UiState` union in `src/ui/ui.ts` and composing a component in `src/ui/screens.ts`, `src/ui/dialogs.ts`, or `src/ui/library.ts`.
 - Add a user setting to `src/ui/settings.ts`; the settings panel renders the label/value/control and persistence is automatic.
-- Persist `VoxelWorld` edited chunks to storage or a server instead of keeping them in memory.
+- Back the save system with a different `StorageDriver` (or stream NSVF archives to a server) by implementing `read`/`write`/`delete`/`list`/`removeDirectory` in `src/game/storage.ts`; the format is self-describing and fingerprinted, so new storage layers do not touch the codec, the save catalog, or the UI.
 
 ## Git and quality
 

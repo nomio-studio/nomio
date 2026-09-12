@@ -2,22 +2,38 @@ import * as THREE from "three";
 import { DEFAULT_BLOCK_REGISTRY, type BlockRegistry } from "./block-registry";
 import { ChunkStreamer } from "./chunk-streamer";
 import { createGameConfig, type GameConfig, type GameConfigOverrides } from "./config";
-import { InputManager } from "./input";
+import { type GameAction, InputManager } from "./input";
 import { VoxelInteractor } from "./interactor";
 import { PlayerController } from "./player";
 import { SceneRuntime } from "./scene-runtime";
+import type { StorageDriver } from "./storage";
+import { generateTerrainChunk } from "./terrain-generation";
 import { TerrainWorker } from "./terrain-worker";
 import type { BlockId } from "./types";
 import { VoxelWorld } from "./world";
 import { VoxelWorldRenderer } from "./world-renderer";
+import {
+  fingerprintBlocks,
+  fingerprintTerrain,
+  WorldPersistence,
+  type WorldSaveStats,
+} from "./voxel-store";
 import type { GameShell } from "../ui/game-shell";
-import { GameUi } from "../ui/ui";
-import { loadUiSettings, type UiSettings } from "../ui/settings";
+import type { GameUi } from "../ui/ui";
+import type { UiSettings } from "../ui/settings";
 
 export interface GameSessionOptions {
   shell: GameShell;
+  /** Application-owned UI. The session posts state but never disposes it. */
+  ui: GameUi;
   registry?: BlockRegistry;
   config?: GameConfigOverrides;
+  /** Storage driver shared with the save system. */
+  driver: StorageDriver;
+  /** Directory that holds this session's save slot, e.g. `maps/<id>/saves/<id>`. */
+  storageRoot: string;
+  /** Called after a successful autosave with the current edit count. */
+  onPersist?: (stats: WorldSaveStats) => void;
 }
 
 export class GameSession {
@@ -32,12 +48,15 @@ export class GameSession {
   private readonly interactor: VoxelInteractor;
   private readonly terrain: TerrainWorker;
   private readonly streamer: ChunkStreamer;
+  private readonly persistence: WorldPersistence;
   private readonly timer = new THREE.Timer();
   private readonly frame = (timestamp: number): void => this.tick(timestamp);
+  private readonly unsubscribeState: () => void;
 
   private frameHandle: number | null = null;
   private running = false;
   private disposed = false;
+  private restored = false;
   private terrainReady = false;
   private booted = false;
   private selectedIndex = 0;
@@ -46,6 +65,7 @@ export class GameSession {
   public constructor(options: GameSessionOptions) {
     this.config = createGameConfig(options.config);
     this.registry = options.registry ?? DEFAULT_BLOCK_REGISTRY;
+    this.ui = options.ui;
     const initialBlock = this.registry.ids[0];
     if (!initialBlock) {
       throw new Error("A game session requires at least one registered block");
@@ -68,20 +88,10 @@ export class GameSession {
         ),
       onPointerLockChange: (locked) => this.ui.setPointerLocked(locked),
     });
-    this.ui = new GameUi(options.shell.ui, {
-      registry: this.registry,
-      settings: loadUiSettings(),
-      onStart: () => this.handleStart(),
-      onPause: () => this.handlePause(),
-      onResume: () => this.handleResume(),
-      onQuitToTitle: () => this.handleQuitToTitle(),
-      onReset: () => this.resetWorld(),
-      onSettingsChange: (settings) => this.applySettings(settings),
-      onStateChange: (state) => this.input.setInteractive(state === "playing"),
-      onSelectBlock: (id) => this.selectBlock(id),
-      onAction: (action) => this.input.queueAction(action),
-      onMoveButton: (direction, active) => this.input.setVirtualMove(direction, active),
+    this.unsubscribeState = this.ui.addStateListener((state) => {
+      this.input.setInteractive(state === "playing");
     });
+    this.input.setInteractive(this.ui.currentState === "playing");
     this.interactor = new VoxelInteractor(this.runtime.camera, this.world, this.worldRenderer, {
       getPlayerBounds: () => this.player.bounds,
       maxDistance: this.config.interaction.maxDistance,
@@ -96,6 +106,22 @@ export class GameSession {
       onChunkCountChanged: () => this.ui.setBlockCount(this.world.size),
       onGeometryChanged: () => this.runtime.invalidateShadows(),
     });
+
+    this.persistence = new WorldPersistence({
+      world: this.world,
+      driver: options.driver,
+      root: options.storageRoot,
+      blockFingerprint: fingerprintBlocks(this.registry),
+      generatorFingerprint: fingerprintTerrain(this.config.terrain),
+      generateBase: (coordinate) => generateTerrainChunk(coordinate, this.config.terrain).blocks,
+      onError: () => {
+        if (!this.disposed) {
+          this.ui.pushToast("Could not save this island's edits", "info");
+        }
+      },
+      onSaved: (stats) => options.onPersist?.(stats),
+    });
+    this.world.onChunkEdited = (coordinate) => this.persistence.markEdited(coordinate);
 
     this.applySettings(this.ui.settings);
     this.timer.connect(document);
@@ -113,7 +139,7 @@ export class GameSession {
 
     this.running = true;
     this.timer.reset();
-    this.beginStreaming();
+    void this.bootstrap();
     this.frameHandle = window.requestAnimationFrame(this.frame);
   }
 
@@ -123,13 +149,85 @@ export class GameSession {
     }
     this.disposed = true;
     this.stop();
+    this.unsubscribeState();
     this.timer.dispose();
     this.input.dispose();
-    this.ui.dispose();
+    this.persistence.dispose();
     this.streamer.dispose();
     this.terrain.dispose();
     this.worldRenderer.dispose();
     this.runtime.dispose();
+  }
+
+  /** Enters play, requesting pointer lock on desktop. */
+  public beginPlay(): void {
+    if (this.usesPointerLock()) {
+      void this.input.requestPointerLock().then((locked) => {
+        if (!locked && this.ui.currentState === "title") {
+          this.ui.setState("playing");
+        }
+      });
+    } else {
+      this.ui.setState("playing");
+    }
+  }
+
+  public pause(): void {
+    if (this.input.isLocked) {
+      this.input.exitPointerLock();
+    } else {
+      this.ui.setState("paused");
+    }
+  }
+
+  public resume(): void {
+    if (this.usesPointerLock()) {
+      void this.input.requestPointerLock().then((locked) => {
+        if (!locked && this.ui.currentState === "paused") {
+          this.ui.setState("playing");
+        }
+      });
+    } else {
+      this.ui.setState("playing");
+    }
+  }
+
+  public quitToTitle(): void {
+    this.ui.setState("title");
+    this.input.exitPointerLock();
+  }
+
+  public reset(): void {
+    this.resetWorld();
+  }
+
+  public selectBlock(id: BlockId): void {
+    const index = this.registry.indexOf(id);
+    if (index < 0) {
+      return;
+    }
+    this.selectBlockByIndex(index);
+  }
+
+  public queueAction(action: GameAction): void {
+    this.input.queueAction(action);
+  }
+
+  public setMoveVector(x: number, z: number): void {
+    this.input.setMoveVector(x, z);
+  }
+
+  public requestJump(): void {
+    this.input.requestJump();
+  }
+
+  public applyUiSettings(settings: UiSettings): void {
+    this.applySettings(settings);
+  }
+
+  /** Flushes any pending edits; awaited before a save is swapped out. */
+  public async flush(): Promise<void> {
+    await this.persistence.flush();
   }
 
   private stop(): void {
@@ -149,6 +247,13 @@ export class GameSession {
     const delta = Math.min(this.timer.getDelta(), 0.05);
     const inputState = this.input.consume();
     this.runtime.update(delta);
+
+    if (!this.restored) {
+      this.runtime.render();
+      this.frameHandle = window.requestAnimationFrame(this.frame);
+      return;
+    }
+
     this.streamer.update(this.player.position);
 
     if (!this.terrainReady) {
@@ -204,43 +309,6 @@ export class GameSession {
     }
   }
 
-  private handleStart(): void {
-    if (this.usesPointerLock()) {
-      void this.input.requestPointerLock().then((locked) => {
-        if (!locked && this.ui.currentState === "title") {
-          this.ui.setState("playing");
-        }
-      });
-    } else {
-      this.ui.setState("playing");
-    }
-  }
-
-  private handlePause(): void {
-    if (this.input.isLocked) {
-      this.input.exitPointerLock();
-    } else {
-      this.ui.setState("paused");
-    }
-  }
-
-  private handleResume(): void {
-    if (this.usesPointerLock()) {
-      void this.input.requestPointerLock().then((locked) => {
-        if (!locked && this.ui.currentState === "paused") {
-          this.ui.setState("playing");
-        }
-      });
-    } else {
-      this.ui.setState("playing");
-    }
-  }
-
-  private handleQuitToTitle(): void {
-    this.ui.setState("title");
-    this.input.exitPointerLock();
-  }
-
   private usesPointerLock(): boolean {
     return !window.matchMedia("(pointer: coarse)").matches;
   }
@@ -248,6 +316,7 @@ export class GameSession {
   private applySettings(settings: UiSettings): void {
     this.player.lookSensitivity = this.config.player.lookSensitivity * settings.lookSensitivity;
     this.player.invertLook = settings.invertLook;
+    this.input.setTouchLookScale(settings.touchSensitivity);
     this.runtime.setFieldOfView(settings.fieldOfView);
     this.runtime.setGrading({
       toneMapping: settings.toneMapping,
@@ -258,14 +327,6 @@ export class GameSession {
     });
   }
 
-  private selectBlock(id: BlockId): void {
-    const index = this.registry.indexOf(id);
-    if (index < 0) {
-      return;
-    }
-    this.selectBlockByIndex(index);
-  }
-
   private selectBlockByIndex(index: number): void {
     const id = this.registry.ids[index];
     if (!id) {
@@ -274,6 +335,17 @@ export class GameSession {
     this.selectedIndex = index;
     this.selectedBlock = id;
     this.ui.selectBlock(id);
+  }
+
+  private async bootstrap(): Promise<void> {
+    this.ui.setLoadingStatus("Restoring your edits…");
+    await this.persistence.restore();
+    if (this.disposed || !this.running) {
+      return;
+    }
+    this.restored = true;
+    this.ui.setLoadingStatus("Carving the island…");
+    this.beginStreaming();
   }
 
   private beginStreaming(): void {
@@ -299,6 +371,7 @@ export class GameSession {
     this.worldRenderer.clear();
     this.player.reset();
     this.streamer.reset();
+    void this.persistence.clear();
     this.interactor.update();
     this.ui.setBlockCount(this.world.size);
     this.ui.setTarget("generating terrain…");

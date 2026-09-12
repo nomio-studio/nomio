@@ -30,6 +30,9 @@ export class VoxelWorld {
   private readonly dirtyChunks = new Set<string>();
   private blockCount = 0;
 
+  /** Notified when a player edit changes a chunk; used for persistence. */
+  public onChunkEdited: ((coordinate: ChunkCoordinate) => void) | null = null;
+
   public constructor(cells: Iterable<BlockCell> = []) {
     this.replace(cells);
   }
@@ -86,6 +89,22 @@ export class VoxelWorld {
       return null;
     }
     return { x: coordinate.x, z: coordinate.z, blocks };
+  }
+
+  /**
+   * Adopts a chunk loaded from storage: it becomes both live and edited, so it
+   * overrides terrain generation and survives unloading.
+   */
+  public adoptChunk(chunk: VoxelChunk): void {
+    this.editedChunks.set(chunkKey(chunk), chunk.blocks);
+    this.setChunk(chunk);
+  }
+
+  public forEachEditedChunk(callback: (chunk: VoxelChunk) => void): void {
+    for (const [key, blocks] of this.editedChunks) {
+      const [x, z] = key.split(",").map(Number);
+      callback({ x, z, blocks });
+    }
   }
 
   /** Returns and clears the chunks changed since the last call. */
@@ -156,7 +175,7 @@ export class VoxelWorld {
     if (previous === blockType) {
       return;
     }
-    this.markEdited(key, chunk.blocks);
+    this.markEdited(coordinate, chunk.blocks);
     if (previous === BLOCK_TYPE.AIR && blockType !== BLOCK_TYPE.AIR) {
       this.blockCount += 1;
     } else if (previous !== BLOCK_TYPE.AIR && blockType === BLOCK_TYPE.AIR) {
@@ -253,16 +272,18 @@ export class VoxelWorld {
     }
     const index = chunkIndex(localCoordinate(position.x), position.y, localCoordinate(position.z));
     if (chunk.blocks[index] !== BLOCK_TYPE.AIR) {
-      this.markEdited(chunkKey(chunk), chunk.blocks);
+      this.markEdited({ x: chunk.x, z: chunk.z }, chunk.blocks);
       chunk.blocks[index] = BLOCK_TYPE.AIR;
       this.blockCount -= 1;
     }
   }
 
-  private markEdited(key: string, blocks: Uint8Array): void {
+  private markEdited(coordinate: ChunkCoordinate, blocks: Uint8Array): void {
+    const key = chunkKey(coordinate);
     if (!this.editedChunks.has(key)) {
       this.editedChunks.set(key, blocks);
     }
     this.dirtyChunks.add(key);
+    this.onChunkEdited?.(coordinate);
   }
 }

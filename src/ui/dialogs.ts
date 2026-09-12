@@ -4,6 +4,7 @@ import { requireElement } from "./dom";
 export interface PauseMenuOptions {
   container: HTMLElement;
   onResume: () => void;
+  onOpenWorlds: () => void;
   onOpenSettings: () => void;
   onRequestReset: () => void;
   onQuitToTitle: () => void;
@@ -13,6 +14,7 @@ export interface PauseMenuOptions {
 export class PauseMenu {
   private readonly listeners = new AbortController();
   private readonly root: HTMLDialogElement;
+  private readonly world: HTMLElement;
 
   public constructor(private readonly options: PauseMenuOptions) {
     options.container.insertAdjacentHTML(
@@ -22,9 +24,11 @@ export class PauseMenu {
         <div class="dialog__panel">
           <p class="eyebrow">Paused</p>
           <h2 class="dialog__title" id="pause-heading">The island waits.</h2>
+          <p class="dialog__body" id="pause-world"></p>
           <p class="dialog__body">Time holds while you are away. Your edits are safe.</p>
           <div class="dialog__actions dialog__actions--stack">
             <button class="button button--primary" id="resume-game" type="button">Resume</button>
+            <button class="button button--ghost" id="pause-worlds" type="button">Worlds &amp; saves</button>
             <button class="button button--ghost" id="pause-settings" type="button">Settings</button>
             <button class="button button--ghost" id="pause-reset" type="button">Reset island</button>
             <button class="button button--quiet" id="quit-to-title" type="button">Return to title</button>
@@ -36,11 +40,17 @@ export class PauseMenu {
     );
 
     this.root = requireElement<HTMLDialogElement>(options.container, "#pause-menu");
+    this.world = requireElement<HTMLElement>(this.root, "#pause-world");
     const { signal } = this.listeners;
     this.root.addEventListener("cancel", this.handleCancel, { signal });
     requireElement<HTMLButtonElement>(this.root, "#resume-game").addEventListener(
       "click",
       options.onResume,
+      { signal },
+    );
+    requireElement<HTMLButtonElement>(this.root, "#pause-worlds").addEventListener(
+      "click",
+      options.onOpenWorlds,
       { signal },
     );
     requireElement<HTMLButtonElement>(this.root, "#pause-settings").addEventListener(
@@ -62,6 +72,11 @@ export class PauseMenu {
 
   public get isOpen(): boolean {
     return this.root.open;
+  }
+
+  public setWorldLabel(label: string): void {
+    this.world.textContent = label;
+    this.world.hidden = label.length === 0;
   }
 
   public open(): void {
@@ -90,6 +105,8 @@ export class PauseMenu {
 
 export interface SettingsPanelOptions {
   container: HTMLElement;
+  /** Reveals the touch-only sensitivity control on touch devices. */
+  touch?: boolean;
   onChange: (settings: UiSettings) => void;
   onClosed?: () => void;
 }
@@ -116,6 +133,15 @@ export class SettingsPanel {
             <input class="field__range" id="setting-sensitivity" name="lookSensitivity" type="range"
               min="${UI_SETTINGS_RANGE.lookSensitivity.min}" max="${UI_SETTINGS_RANGE.lookSensitivity.max}"
               step="${UI_SETTINGS_RANGE.lookSensitivity.step}" />
+          </div>
+
+          <div class="field" id="touch-sensitivity-field" hidden>
+            <label class="field__label" for="setting-touch">
+              Touch sensitivity <output class="field__value" id="touch-value" for="setting-touch"></output>
+            </label>
+            <input class="field__range" id="setting-touch" name="touchSensitivity" type="range"
+              min="${UI_SETTINGS_RANGE.touchSensitivity.min}" max="${UI_SETTINGS_RANGE.touchSensitivity.max}"
+              step="${UI_SETTINGS_RANGE.touchSensitivity.step}" />
           </div>
 
           <div class="field">
@@ -199,6 +225,7 @@ export class SettingsPanel {
 
     this.root = requireElement<HTMLDialogElement>(options.container, "#settings-panel");
     this.form = requireElement<HTMLFormElement>(this.root, "#settings-form");
+    requireElement<HTMLElement>(this.root, "#touch-sensitivity-field").hidden = !options.touch;
     const { signal } = this.listeners;
     this.form.addEventListener("input", this.handleInput, { signal });
     this.form.addEventListener("change", this.handleInput, { signal });
@@ -236,8 +263,10 @@ export class SettingsPanel {
 
   private applyValues(settings: UiSettings): void {
     const sensitivity = requireElement<HTMLInputElement>(this.root, "#setting-sensitivity");
+    const touch = requireElement<HTMLInputElement>(this.root, "#setting-touch");
     const fov = requireElement<HTMLInputElement>(this.root, "#setting-fov");
     sensitivity.value = String(settings.lookSensitivity);
+    touch.value = String(settings.touchSensitivity);
     fov.value = String(settings.fieldOfView);
     requireElement<HTMLInputElement>(this.root, "#setting-invert").checked = settings.invertLook;
     requireElement<HTMLInputElement>(this.root, "#setting-hints").checked =
@@ -264,6 +293,7 @@ export class SettingsPanel {
       lookSensitivity: Number(
         requireElement<HTMLInputElement>(this.root, "#setting-sensitivity").value,
       ),
+      touchSensitivity: Number(requireElement<HTMLInputElement>(this.root, "#setting-touch").value),
       fieldOfView: Number(requireElement<HTMLInputElement>(this.root, "#setting-fov").value),
       invertLook: requireElement<HTMLInputElement>(this.root, "#setting-invert").checked,
       showControlHints: requireElement<HTMLInputElement>(this.root, "#setting-hints").checked,
@@ -282,6 +312,8 @@ export class SettingsPanel {
   private updateOutputs(settings: UiSettings): void {
     requireElement<HTMLOutputElement>(this.root, "#sensitivity-value").textContent =
       `${settings.lookSensitivity.toFixed(2)}×`;
+    requireElement<HTMLOutputElement>(this.root, "#touch-value").textContent =
+      `${settings.touchSensitivity.toFixed(2)}×`;
     requireElement<HTMLOutputElement>(this.root, "#fov-value").textContent =
       `${Math.round(settings.fieldOfView)}°`;
     requireElement<HTMLOutputElement>(this.root, "#exposure-value").textContent =

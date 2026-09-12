@@ -4,6 +4,8 @@ import type { ToneMappingMode } from "../game/config";
 export interface UiSettings {
   /** Multiplier applied to the base look sensitivity. */
   lookSensitivity: number;
+  /** Extra multiplier for touch look drags, so fingers feel distinct from a mouse. */
+  touchSensitivity: number;
   /** Vertical field of view in degrees. */
   fieldOfView: number;
   invertLook: boolean;
@@ -26,6 +28,7 @@ export const UI_SETTINGS_STORAGE_KEY = "nomio:settings:v1";
 
 export const DEFAULT_UI_SETTINGS: UiSettings = {
   lookSensitivity: 1,
+  touchSensitivity: 1.8,
   fieldOfView: 68,
   invertLook: false,
   showControlHints: true,
@@ -39,6 +42,7 @@ export const DEFAULT_UI_SETTINGS: UiSettings = {
 
 export const UI_SETTINGS_RANGE = {
   lookSensitivity: { min: 0.25, max: 3, step: 0.05 },
+  touchSensitivity: { min: 0.5, max: 3.5, step: 0.05 },
   fieldOfView: { min: 55, max: 100, step: 1 },
   exposure: { min: -2, max: 2, step: 0.05 },
   contrast: { min: 0.5, max: 1.8, step: 0.01 },
@@ -59,6 +63,11 @@ export const normalizeUiSettings = (value: Partial<UiSettings> | null | undefine
       Number(source.lookSensitivity ?? DEFAULT_UI_SETTINGS.lookSensitivity),
       UI_SETTINGS_RANGE.lookSensitivity.min,
       UI_SETTINGS_RANGE.lookSensitivity.max,
+    ),
+    touchSensitivity: clamp(
+      Number(source.touchSensitivity ?? DEFAULT_UI_SETTINGS.touchSensitivity),
+      UI_SETTINGS_RANGE.touchSensitivity.min,
+      UI_SETTINGS_RANGE.touchSensitivity.max,
     ),
     fieldOfView: clamp(
       Number(source.fieldOfView ?? DEFAULT_UI_SETTINGS.fieldOfView),

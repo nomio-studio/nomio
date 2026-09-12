@@ -22,14 +22,17 @@
 - GPU mesh uploads are time-budgeted per frame and prioritized nearest-first so the large view distance stays responsive.
 - Frustum culling per chunk mesh, distance culling through streaming unload, and fog/camera-far that scale with the view distance.
 - Shadow maps refresh on demand and only nearby chunks cast shadows.
-- Persistent player edits: modified chunks are snapshotted and restored from memory when the player leaves and returns.
+- Persistent player edits: modified chunks are snapshotted in memory when the player leaves and returns, and durably saved through the **Nomio Voxel Storage Format (NSVF)**.
+- A self-designed voxel storage format (`voxel-format.ts`): every 16×16×40 chunk is encoded independently by the smallest of seven voxel-aware codecs (`constant`, palette bitpack, RLE, column dictionary, surface profile, sparse baseline delta, and canonical Huffman), tagged with one byte. Chunks group into 32×32-chunk regions (magic `NVRG`) with block/generator fingerprints and a per-chunk CRC32 directory, and regions group into one seekable archive (magic `NSVF`).
+- Delta persistence (`voxel-store.ts`): only edited chunks are stored, as sparse deltas against the deterministic terrain generator, so untouched world costs zero bytes and saves are a few hundred bytes. A path-based `StorageDriver` seam (`storage.ts`) provides OPFS (default), `localStorage`, and in-memory backends; saves are debounced 600 ms, restored before streaming begins, fingerprinted so stale saves are discarded after a generator change, and cleared on reset.
+- Multiple worlds and multiple save files (`save-system.ts`): a world owns a terrain definition and any number of named saves, catalogued as JSON over the storage driver (`catalog.json`, `maps/<id>/saves.json`, `maps/<id>/saves/<id>/regions/*.nvrg`). The in-game **worlds library** (`ui/library.ts`) creates, renames, duplicates, deletes, and opens worlds and saves, and shows each save's edit count and timestamp; the active save and its world are protected from deletion while playing. `NomioApplication` owns the persistent UI and storage and swaps the `GameSession` (and therefore the terrain and save root) when the player opens another save.
 - First-person pointer-lock controls for desktop.
-- Touch look, virtual movement pad, and Mine / Place actions for smaller screens.
+- Touch support: a floating analog movement stick, drag-to-look with per-pointer tracking, and Mine / Place / Jump buttons with hold-to-repeat, enabled automatically on touch devices and laid out around safe-area insets.
 - Gravity, jumping, simple voxel-aware player collision, and fall recovery.
 - Center-screen raycast targeting with an accent-colored block highlight.
 - Break, place, block palette selection, block count, and reset interactions.
-- A complete UI state machine (`loading → title → playing ↔ paused`) in `src/ui/ui.ts`, with a boot screen showing terrain progress, a title screen, an in-game HUD, native `<dialog>` pause / settings / reset-confirm surfaces, and transient toasts for mining, placing, fall recovery, and reset.
-- Persisted, live-applied settings for look sensitivity, field of view, invert look, control hints, and reduced motion, with a restore-defaults action.
+- A complete UI state machine (`loading → title → playing ↔ paused`) in `src/ui/ui.ts`, with a boot screen showing terrain progress, a title screen, an in-game HUD, native `<dialog>` pause / settings / reset-confirm surfaces, a worlds/saves library, and transient toasts for mining, placing, fall recovery, and reset.
+- Persisted, live-applied settings for look sensitivity, touch sensitivity, field of view, invert look, control hints, and reduced motion, with a restore-defaults action.
 - Keyboard-complete controls: focus moves into dialogs and returns on close, the hotbar is a toolbar with a roving tabindex and arrow-key navigation, every control has an accessible name, and game feedback is announced through a polite live region.
 - A token-based palette in CSS custom properties (shared with Three.js through `src/ui/tokens.ts`), concentric surfaces, layered shadows, `scale(0.96)` press feedback, tabular numerals, and `prefers-reduced-motion` / `-transparency` / `-contrast` handling.
 
@@ -45,7 +48,7 @@
 - Tune streaming concurrency, the unload hysteresis band, ready radius, and mesh upload budget through `ChunkStreamerOptions` and `RenderConfig`.
 - Tune the shadow-casting band and mesh budget through `RenderConfig`.
 - Add tools or actions through `GameAction` and `VoxelInteractor`.
-- Persist or synchronize edited chunks from the `VoxelWorld` API without changing the HUD.
+- Swap or add a persistence backend by implementing the `StorageDriver` interface in `src/game/storage.ts`, or stream NSVF archives to a server, without changing the codec, the save catalog, or the HUD.
 
 ## Verification
 
@@ -55,5 +58,9 @@ The current implementation passes:
 - `npm run lint`
 - `npm run format:check`
 - `npm run build`
+- `npm run bench:voxel-format`
+- `npm run test:saves`
+
+The voxel format benchmark round-trips every codec plus the region and archive containers (negative coordinates and CRC corruption included) and beats `node:zlib` gzip on structured voxel data (about 1.98× smaller) and edited-world saves (about 47× smaller: 529 B vs 24,883 B); only adversarial random noise is roughly on par and is reported separately. The save-system test runs the catalog and per-save persistence on an in-memory driver and passes 24 checks (multiple worlds and saves, duplication, deletion, round-trip, fingerprint invalidation, and clear).
 
 The local Vite server also served the updated game entrypoint successfully during the final smoke check. Browser suites cover the terrain/streaming pipeline (30 checks), the sky shader (5 checks), the UI flow (24 checks: boot → title → play → pause → settings → reset-confirm → quit, roving-tabindex hotbar, focus placement, persisted settings, reduced motion, and a 320px no-overflow check), the antialiasing pipeline (10 checks: deferred tone mapping, jitter/accumulation, non-TAA determinism, diagonal-edge resolve, narrow transition band, sharpen contrast, and camera motion), the atmosphere (7 checks: near-field clarity, far-field color shift, height mist, sun inscattering, and palette-driven color), and global illumination (10 checks: green grass bounce, cyan crystal bleed, disabled GI producing zero indirect, a solid volume doing no work, and the renderer's per-vertex indirect attribute), and the tone-mapping/color-grading stage (8 checks: exposure, contrast, saturation, white balance, distinct AgX/ACES highlight rolloff, a monotonic AgX curve, and vignette). A static token audit confirms every text pair meets WCAG AA (≥4.5:1) over both the ink scene and the brightest terrain. On a captured game frame, TAA reduced hard-edged (aliased) pixels from 0.60% to 0.24% of the frame while keeping edge transitions within two pixels, and captured atmosphere frames show the sunset horizon at rgb(219,190,129) against near terrain at rgb(39,41,43) and a deep-blue rgb(1,6,13) night sky.

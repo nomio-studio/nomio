@@ -11,6 +11,18 @@ export const requireElement = <T extends Element>(root: ParentNode, selector: st
 export const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+/**
+ * True when the active device exposes touch input. `maxTouchPoints` catches
+ * phones and tablets even before the first gesture; the coarse-pointer query is
+ * a fallback for browsers that under-report touch points.
+ */
+export const isTouchDevice = (): boolean => {
+  if (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0) {
+    return true;
+  }
+  return typeof window !== "undefined" && window.matchMedia("(any-pointer: coarse)").matches;
+};
+
 /** Keyboard slot labels for the block palette: 1-9, 0, minus, equals. */
 export const formatSlotKey = (index: number): string => {
   if (index < 9) {

@@ -1,13 +1,15 @@
 import type { BlockRegistry } from "../game/block-registry";
-import type { GameAction, MoveDirection } from "../game/input";
+import type { GameAction } from "../game/input";
 import type { BlockId } from "../game/types";
 import { formatSlotKey, requireElement, setRovingTabIndex } from "./dom";
+import { TouchControls } from "./touch-controls";
 
 export interface HudOptions {
   registry: BlockRegistry;
   onSelectBlock: (id: BlockId) => void;
   onAction: (action: GameAction) => void;
-  onMoveButton: (direction: MoveDirection, active: boolean) => void;
+  onMove: (x: number, z: number) => void;
+  onJump: () => void;
   onPause: () => void;
   onReset: () => void;
 }
@@ -33,6 +35,7 @@ export class Hud {
   private readonly hotbar: HTMLElement;
   private readonly controlsHint: HTMLElement;
   private readonly slots: HTMLButtonElement[];
+  private readonly touchControls: TouchControls;
 
   public constructor(
     container: HTMLElement,
@@ -103,20 +106,6 @@ export class Hud {
           </div>
           <p class="hotbar__caption" id="selection-label"></p>
         </nav>
-
-        <div class="mobile-actions" aria-label="Touch actions">
-          <button type="button" data-action="break">Mine</button>
-          <button type="button" data-action="place">Place</button>
-        </div>
-
-        <div class="touch-pad" aria-label="Touch movement">
-          <button type="button" data-move="forward" aria-label="Move forward">↑</button>
-          <div>
-            <button type="button" data-move="left" aria-label="Move left">←</button>
-            <button type="button" data-move="back" aria-label="Move back">↓</button>
-            <button type="button" data-move="right" aria-label="Move right">→</button>
-          </div>
-        </div>
       </div>
     `,
     );
@@ -128,6 +117,11 @@ export class Hud {
     this.hotbar = requireElement<HTMLElement>(container, "#hotbar");
     this.controlsHint = requireElement<HTMLElement>(container, "#controls-hint");
     this.slots = [...this.hotbar.querySelectorAll<HTMLButtonElement>("[data-block]")];
+    this.touchControls = new TouchControls(this.root, {
+      onMove: options.onMove,
+      onAction: options.onAction,
+      onJump: options.onJump,
+    });
     this.bindEvents();
   }
 
@@ -169,6 +163,7 @@ export class Hud {
 
   public dispose(): void {
     this.listeners.abort();
+    this.touchControls.dispose();
     this.root.remove();
   }
 
@@ -200,37 +195,6 @@ export class Hud {
 
     const toolbar = requireElement<HTMLElement>(this.root, ".hotbar__items");
     toolbar.addEventListener("keydown", this.handleHotbarKeyDown, { signal });
-
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>("[data-action]")) {
-      button.addEventListener(
-        "click",
-        () => {
-          const action = button.dataset.action;
-          if (action === "break" || action === "place") {
-            this.options.onAction(action);
-          }
-        },
-        { signal },
-      );
-    }
-
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>("[data-move]")) {
-      const direction = button.dataset.move;
-      if (
-        direction !== "forward" &&
-        direction !== "back" &&
-        direction !== "left" &&
-        direction !== "right"
-      ) {
-        continue;
-      }
-
-      const setActive = (active: boolean): void => this.options.onMoveButton(direction, active);
-      button.addEventListener("pointerdown", () => setActive(true), { signal });
-      button.addEventListener("pointerup", () => setActive(false), { signal });
-      button.addEventListener("pointerleave", () => setActive(false), { signal });
-      button.addEventListener("pointercancel", () => setActive(false), { signal });
-    }
   }
 
   private readonly handleHotbarKeyDown = (event: KeyboardEvent): void => {
