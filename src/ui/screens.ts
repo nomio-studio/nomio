@@ -89,7 +89,7 @@ export class TitleScreen {
           <dl class="controls-list" aria-label="Controls">
             <div class="controls-list__pointer"><dt><kbd>WASD</kbd></dt><dd>Walk</dd></div>
             <div class="controls-list__pointer"><dt><kbd>Space</kbd></dt><dd>Hop</dd></div>
-            <div class="controls-list__pointer"><dt><kbd>LMB</kbd> / <kbd>RMB</kbd></dt><dd>Mine / place</dd></div>
+            <div class="controls-list__pointer"><dt><kbd>LMB</kbd> / <kbd>RMB</kbd></dt><dd>Hold to mine / place</dd></div>
             <div class="controls-list__pointer"><dt><kbd>1–0</kbd></dt><dd>Choose a material</dd></div>
             <div class="controls-list__pointer"><dt><kbd>Esc</kbd></dt><dd>Pause</dd></div>
             <div class="controls-list__touch"><dt>Stick</dt><dd>Move</dd></div>

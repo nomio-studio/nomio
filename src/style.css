@@ -832,6 +832,11 @@ kbd {
   display: none;
 }
 
+/* Touch aims with a finger, so the reticle would only add clutter. */
+#ui.is-touch .crosshair {
+  display: none;
+}
+
 .controls-list__touch {
   display: none;
 }

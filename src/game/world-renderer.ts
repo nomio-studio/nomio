@@ -10,6 +10,7 @@ import {
   type ChunkMeshBuffers,
 } from "./chunk-types";
 import { BlockTextureAtlas } from "./texture-atlas";
+import { BREAK_STAGES, createBreakStageTexture } from "./procedural-textures";
 import type { TextureFace } from "./texture-types";
 import type { BlockTarget } from "./types";
 import type { FogController } from "./fog";
@@ -38,6 +39,8 @@ export class VoxelWorldRenderer {
   private readonly group = new THREE.Group();
   private readonly blockGeometry = new THREE.BoxGeometry(1, 1, 1);
   private readonly highlight: THREE.LineSegments;
+  private readonly breakOverlay: THREE.Mesh;
+  private readonly breakTextures: THREE.CanvasTexture[];
   private readonly textureAtlas: BlockTextureAtlas;
   private readonly chunkMeshes = new Map<string, THREE.Mesh>();
   private readonly materials: THREE.MeshStandardMaterial[];
@@ -72,6 +75,27 @@ export class VoxelWorldRenderer {
     this.highlight.scale.setScalar(1.04);
     this.highlight.visible = false;
     this.scene.add(this.highlight);
+
+    // The destroy overlay is a hair larger than the block so the crack texture
+    // sits on the surface without z-fighting; alpha keeps the block showing
+    // through between the fissures.
+    this.breakTextures = Array.from({ length: BREAK_STAGES }, (_, stage) =>
+      createBreakStageTexture(stage),
+    );
+    this.breakOverlay = new THREE.Mesh(
+      new THREE.BoxGeometry(1.01, 1.01, 1.01),
+      new THREE.MeshBasicMaterial({
+        map: this.breakTextures[0] ?? null,
+        transparent: true,
+        depthWrite: false,
+        alphaTest: 0.02,
+        fog: false,
+      }),
+    );
+    this.breakOverlay.name = "break-overlay";
+    this.breakOverlay.visible = false;
+    this.breakOverlay.renderOrder = 2;
+    this.scene.add(this.breakOverlay);
   }
 
   /** Applies a precomputed chunk mesh, building its GPU geometry on the main thread. */
@@ -174,13 +198,41 @@ export class VoxelWorldRenderer {
     this.highlight.visible = true;
   }
 
+  /** Draws the destroy-stage crack overlay on the aimed block at `progress` 0..1. */
+  public showBreakOverlay(target: BlockTarget | null, progress: number): void {
+    if (!target || progress <= 0) {
+      this.breakOverlay.visible = false;
+      return;
+    }
+
+    const stage = Math.min(BREAK_STAGES - 1, Math.max(0, Math.floor(progress * BREAK_STAGES)));
+    const material = this.breakOverlay.material as THREE.MeshBasicMaterial;
+    const texture = this.breakTextures[stage];
+    if (texture && material.map !== texture) {
+      material.map = texture;
+      material.needsUpdate = true;
+    }
+
+    this.breakOverlay.position.set(
+      target.position.x + 0.5,
+      target.position.y + 0.5,
+      target.position.z + 0.5,
+    );
+    this.breakOverlay.visible = true;
+  }
+
   public dispose(): void {
     this.clear();
     this.blockGeometry.dispose();
     this.highlight.geometry.dispose();
     (this.highlight.material as THREE.Material).dispose();
+    this.breakOverlay.geometry.dispose();
+    (this.breakOverlay.material as THREE.Material).dispose();
+    for (const texture of this.breakTextures) {
+      texture.dispose();
+    }
     this.textureAtlas.dispose();
-    this.scene.remove(this.group, this.highlight);
+    this.scene.remove(this.group, this.highlight, this.breakOverlay);
   }
 
   private isShadowCaster(coordinate: ChunkCoordinate): boolean {

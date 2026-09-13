@@ -24,6 +24,8 @@ export interface PlayerConfig {
 
 export interface InteractionConfig {
   maxDistance: number;
+  /** Seconds of continuous mining needed to break a block. */
+  breakDuration: number;
 }
 
 export interface RenderConfig {
@@ -180,6 +182,7 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   },
   interaction: {
     maxDistance: 7,
+    breakDuration: 0.4,
   },
   render: {
     maxPixelRatio: 2,

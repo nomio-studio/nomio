@@ -1,4 +1,4 @@
-export type GameAction = "break" | "place";
+export type GameAction = "place";
 
 export interface InputState {
   moveX: number;
@@ -6,6 +6,8 @@ export interface InputState {
   lookX: number;
   lookY: number;
   jump: boolean;
+  /** True while the break input is held; the interactor turns it into progress. */
+  breaking: boolean;
   actions: GameAction[];
 }
 
@@ -34,10 +36,8 @@ const clampUnit = (value: number): number => Math.min(1, Math.max(-1, value));
 
 /** Movement (CSS px) that turns a pending touch into a look drag instead of a tap. */
 const TAP_MOVE_TOLERANCE = 16;
-/** Hold time before a stationary touch fires a break. */
+/** Hold time before a stationary touch starts mining. */
 const LONG_PRESS_MS = 400;
-/** Interval between repeat breaks while a long press is held. */
-const BREAK_REPEAT_MS = 180;
 
 /**
  * Unifies keyboard, mouse, pen, and touch into one polled `InputState`.
@@ -45,11 +45,12 @@ const BREAK_REPEAT_MS = 180;
  * Keyboard and pointer-lock mice feed the digital paths. Touch and pen feed the
  * analog paths: a virtual stick supplies a continuous `moveX`/`moveZ`, and the
  * first non-mouse pointer on the canvas drives the view. That same canvas
- * pointer is also the edit gesture — a quick tap places, a stationary hold
- * breaks (repeating while held), and moving past a small slop turns it into a
- * drag-to-look. Every pointer is tracked by id and released on `pointerup`,
- * `pointercancel`, blur, or tab hide, so a dropped finger can never leave the
- * player walking forever.
+ * pointer is also the edit gesture — a quick tap places, a stationary hold mines
+ * while held, and moving past a small slop turns it into a drag-to-look. Mining
+ * is reported as a held `breaking` flag rather than a stream of actions so the
+ * interactor can animate one block's progress. Every pointer is tracked by id
+ * and released on `pointerup`, `pointercancel`, blur, or tab hide, so a dropped
+ * finger can never leave the player walking forever.
  */
 export class InputManager {
   private readonly listeners = new AbortController();
@@ -66,7 +67,8 @@ export class InputManager {
   private readonly touchOrigin = { x: 0, y: 0 };
   private touchGesture: "pending" | "look" | "break" = "pending";
   private longPressTimer: number | null = null;
-  private breakRepeatTimer: number | null = null;
+  private mouseBreaking = false;
+  private touchBreaking = false;
   private locked = false;
   private interactive = true;
 
@@ -86,6 +88,10 @@ export class InputManager {
    * loading screens so only the explicit start action begins play.
    */
   public setInteractive(interactive: boolean): void {
+    // Leaving play (pause, title, blur) must not leave a break or move latched.
+    if (!interactive && this.interactive) {
+      this.clear();
+    }
     this.interactive = interactive;
   }
 
@@ -160,6 +166,7 @@ export class InputManager {
       lookX: this.lookX,
       lookY: this.lookY,
       jump: this.jump,
+      breaking: this.mouseBreaking || this.touchBreaking,
       actions: [...this.actions],
     };
 
@@ -184,6 +191,7 @@ export class InputManager {
     this.canvas.addEventListener("pointerup", this.handleCanvasPointerUp, { signal });
     this.canvas.addEventListener("pointercancel", this.handleCanvasPointerUp, { signal });
     this.canvas.addEventListener("mousedown", this.handleMouseDown, { signal });
+    this.canvas.addEventListener("mouseup", this.handleMouseUp, { signal });
     this.canvas.addEventListener("contextmenu", this.preventContextMenu, { signal });
   }
 
@@ -221,6 +229,8 @@ export class InputManager {
     this.jump = false;
     this.moveX = 0;
     this.moveZ = 0;
+    this.mouseBreaking = false;
+    this.touchBreaking = false;
     this.actions.length = 0;
     this.clearGestureTimers();
     if (this.lookPointerId !== null) {
@@ -230,6 +240,9 @@ export class InputManager {
 
   private readonly handlePointerLockChange = (): void => {
     this.locked = document.pointerLockElement === this.canvas;
+    if (!this.locked) {
+      this.mouseBreaking = false;
+    }
     this.options.onPointerLockChange?.(this.locked);
   };
 
@@ -277,13 +290,14 @@ export class InputManager {
     this.lookOrigin.y = event.clientY;
 
     // Once the finger travels past the tap slop the gesture is a look drag: it
-    // cancels the pending tap/long press and ignores any break repetition.
+    // cancels the pending tap and any in-progress mining.
     if (
       this.touchGesture !== "look" &&
       Math.hypot(event.clientX - this.touchOrigin.x, event.clientY - this.touchOrigin.y) >
         TAP_MOVE_TOLERANCE
     ) {
       this.touchGesture = "look";
+      this.touchBreaking = false;
       this.clearGestureTimers();
     }
 
@@ -305,14 +319,13 @@ export class InputManager {
     }
   };
 
-  /** Fires a break once the touch has been held still long enough. */
+  /** Starts mining once the touch has been held still long enough. */
   private armLongPress(): void {
     this.clearGestureTimers();
     this.longPressTimer = window.setTimeout(() => {
       this.longPressTimer = null;
       this.touchGesture = "break";
-      this.queueAction("break");
-      this.breakRepeatTimer = window.setInterval(() => this.queueAction("break"), BREAK_REPEAT_MS);
+      this.touchBreaking = true;
     }, LONG_PRESS_MS);
   }
 
@@ -321,14 +334,11 @@ export class InputManager {
       window.clearTimeout(this.longPressTimer);
       this.longPressTimer = null;
     }
-    if (this.breakRepeatTimer !== null) {
-      window.clearInterval(this.breakRepeatTimer);
-      this.breakRepeatTimer = null;
-    }
   }
 
   private releaseLookPointer(pointerId: number): void {
     this.clearGestureTimers();
+    this.touchBreaking = false;
     this.lookPointerId = null;
     this.touchGesture = "pending";
     try {
@@ -344,9 +354,15 @@ export class InputManager {
     }
 
     if (event.button === 0) {
-      this.queueAction("break");
+      this.mouseBreaking = true;
     } else if (event.button === 2) {
       this.queueAction("place");
+    }
+  };
+
+  private readonly handleMouseUp = (event: MouseEvent): void => {
+    if (event.button === 0) {
+      this.mouseBreaking = false;
     }
   };
 

@@ -395,4 +395,62 @@ export const createProceduralTexture = (
   return texture;
 };
 
+/**
+ * Destroy-stage crack overlays drawn as transparent tiles. Stage 0 is a single
+ * faint fissure and each later stage adds another branch and a little darkness,
+ * so the overlay visibly spreads as a block is mined.
+ */
+export const BREAK_STAGES = 10;
+
+const drawBreakStage = (stage: number): HTMLCanvasElement => {
+  const size = TEXTURE_SIZE;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("2D canvas is required for destroy-stage textures");
+  }
+
+  context.imageSmoothingEnabled = false;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  const random = createRandom(0x5eed + stage * 977);
+  const centre = size / 2;
+  const intensity = 0.3 + (stage / Math.max(1, BREAK_STAGES - 1)) * 0.44;
+
+  for (let crack = 0; crack <= stage; crack += 1) {
+    const angle = random() * Math.PI * 2;
+    const directionX = Math.cos(angle);
+    const directionY = Math.sin(angle);
+    context.strokeStyle = `rgba(12, 9, 7, ${intensity.toFixed(3)})`;
+    context.lineWidth = random() > 0.72 ? 2 : 1;
+
+    let x = centre + (random() - 0.5) * 6;
+    let y = centre + (random() - 0.5) * 6;
+    context.beginPath();
+    context.moveTo(x, y);
+    const steps = 4 + Math.floor(random() * 3);
+    for (let step = 0; step < steps; step += 1) {
+      const length = size * 0.11 + random() * (size * 0.1);
+      x += directionX * length + (random() - 0.5) * 7;
+      y += directionY * length + (random() - 0.5) * 7;
+      context.lineTo(x, y);
+    }
+    context.stroke();
+  }
+
+  return canvas;
+};
+
+export const createBreakStageTexture = (stage: number): THREE.CanvasTexture => {
+  const texture = new THREE.CanvasTexture(drawBreakStage(stage));
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestMipmapNearestFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+};
+
 registerBuiltInTextureDrawers();

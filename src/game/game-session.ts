@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { DEFAULT_BLOCK_REGISTRY, type BlockRegistry } from "./block-registry";
+import { BreakParticles } from "./break-particles";
 import { ChunkStreamer } from "./chunk-streamer";
 import { createGameConfig, type GameConfig, type GameConfigOverrides } from "./config";
 import { InputManager } from "./input";
@@ -46,6 +47,7 @@ export class GameSession {
   private readonly input: InputManager;
   private readonly ui: GameUi;
   private readonly interactor: VoxelInteractor;
+  private readonly breakParticles: BreakParticles;
   private readonly terrain: TerrainWorker;
   private readonly streamer: ChunkStreamer;
   private readonly persistence: WorldPersistence;
@@ -97,6 +99,7 @@ export class GameSession {
       maxDistance: this.config.interaction.maxDistance,
       onWorldChanged: () => this.ui.setBlockCount(this.world.size),
     });
+    this.breakParticles = new BreakParticles(this.runtime.scene);
     this.streamer = new ChunkStreamer({
       world: this.world,
       renderer: this.worldRenderer,
@@ -156,6 +159,7 @@ export class GameSession {
     this.streamer.dispose();
     this.terrain.dispose();
     this.worldRenderer.dispose();
+    this.breakParticles.dispose();
     this.runtime.dispose();
   }
 
@@ -271,13 +275,13 @@ export class GameSession {
     this.runtime.setFocus(this.player.position.x, this.player.position.z);
 
     this.interactor.update();
+    this.updateMining(delta, inputState.breaking);
     for (const action of inputState.actions) {
-      if (action === "break") {
-        this.handleBreak();
-      } else {
+      if (action === "place") {
         this.handlePlace();
       }
     }
+    this.breakParticles.update(delta);
 
     const target = this.interactor.currentTarget;
     this.ui.setTarget(
@@ -289,10 +293,17 @@ export class GameSession {
     this.frameHandle = window.requestAnimationFrame(this.frame);
   }
 
-  private handleBreak(): void {
+  /** Advances mining while the break input is held, breaking at full progress. */
+  private updateMining(delta: number, breaking: boolean): void {
     const target = this.interactor.currentTarget;
     const id = target ? this.world.get(target.position) : null;
-    if (this.interactor.breakTarget() && id) {
+    if (!breaking || !target || !id) {
+      this.interactor.clearMining();
+      return;
+    }
+
+    if (this.interactor.advanceMining(delta, this.config.interaction.breakDuration)) {
+      this.breakParticles.burst(target.position, this.registry.get(id).color);
       this.runtime.resetTemporal();
       this.ui.pushToast(`Mined ${this.registry.get(id).label}`, "info");
     }
@@ -368,6 +379,8 @@ export class GameSession {
     this.player.reset();
     this.streamer.reset();
     void this.persistence.clear();
+    this.interactor.clearMining();
+    this.breakParticles.clear();
     this.interactor.update();
     this.ui.setBlockCount(this.world.size);
     this.ui.setTarget("generating terrain…");

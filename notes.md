@@ -210,8 +210,17 @@
 
 - Movement now auto-hops one-block ledges. `PlayerConfig` gained `autoJump` and `stepHeight`; when a horizontal step is blocked and the player is grounded, `PlayerController` probes the target one block up — if that space is clear it applies a jump impulse, so a one-block rise is climbed while a two-block wall still simply blocks. A deterministic Node harness walks into 1- and 2-high steps and confirms the climb, the stall when `autoJump` is off, and the wall guard.
 - Defaults were raised for a snappier feel: walk speed 4.2 → 5.2 blocks/s and base look sensitivity 0.0022 → 0.003, with touch inheriting the same lift through its multiplier.
-- Touch editing moved off the answer buttons. `touch-controls.ts` now renders only the floating stick and a Jump button; the Mine and Place buttons are gone. The first non-mouse canvas pointer is both the look and the edit gesture: moving past a 16 px slop drags the view, a quick tap places on the aimed face, and a stationary 400 ms hold mines and repeats every 180 ms while held. Break and place are gated on the playing state, so a dropped finger cannot edit a paused world.
+- Touch editing moved off the answer buttons. `touch-controls.ts` now renders only the floating stick and a Jump button; the Mine and Place buttons are gone. The first non-mouse canvas pointer is both the look and the edit gesture: moving past a 16 px slop drags the view, a quick tap places on the aimed face, and a stationary 400 ms hold starts mining, which continues while the finger stays down. Break and place are gated on the playing state, so a dropped finger cannot edit a paused world.
 - Verification: a fake-DOM Node harness asserts the gesture state machine (tap places, a short hold still places, a long press breaks, holding repeats, a drag looks without editing, sloppy taps place, and moving after a hold cancels the repeat), and a CDP touch run against the dev server enters play, drags to aim, taps to place (`Placed Grass`), and holds to mine (`Mined Grass`) with no console errors.
+
+## Breaking feedback pass delivered
+
+- Mining is held, not instant. `InputState` carries a `breaking` flag (pointer-lock LMB or a touch long press) instead of discrete `break` actions; `VoxelInteractor.advanceMining` accumulates per-target progress over `InteractionConfig.breakDuration` (0.4 s) and only removes the block at full progress. Progress resets the moment the aimed block changes or the input is released, so a fresh crack starts on the next block.
+- The aimed block grows a destroy-stage overlay: a slightly larger transparent cube whose crack texture advances through the ten `createBreakStageTexture` stages as progress climbs. The overlay hides whenever mining stops, the target changes, or the world resets.
+- A break throws a burst of tinted debris. `BreakParticles` pools 96 instanced cubes in a single draw call, tints them from the broken block's `color`, and integrates gravity, spin, and a tail-end shrink before retiring them.
+- The reticle is pointer-only now: `#ui.is-touch .crosshair` hides it, while desktop keeps it as the mining target.
+- `InputManager.setInteractive(false)` clears held input, so pausing mid-mine cannot leave the break latched.
+- Verification: `mining-progress.ts` asserts half-progress no-break, the exact full-progress break, per-target reset, and release and target-loss resets; the fake-DOM gesture harness passes its tap/hold/drag checks; a CDP touch run enters play, taps to place, and holds to mine (`Mined Grass`) with no console errors; a reticle probe confirms the crosshair shows on desktop and hides on touch; and screenshots confirm the crack overlay and debris render.
 
 ## Existing visual direction
 

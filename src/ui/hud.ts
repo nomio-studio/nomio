@@ -90,7 +90,7 @@ export class Hud {
         <aside class="controls-card" id="controls-hint" aria-label="Game controls">
           <span class="eyebrow">Field kit</span>
           <p><kbd>WASD</kbd> move <kbd>Space</kbd> hop</p>
-          <p><kbd>LMB</kbd> mine <kbd>RMB</kbd> place</p>
+          <p>hold <kbd>LMB</kbd> mine <kbd>RMB</kbd> place</p>
           <p><kbd>1–0</kbd> choose <kbd>[ ]</kbd> cycle</p>
           <p><kbd>Esc</kbd> pause</p>
           <button class="text-button" id="reset-world" type="button">
