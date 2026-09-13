@@ -69,3 +69,39 @@ Make touch editing target the user's tap/hold position instead of the center cro
 ## Status
 
 **Complete** - Touch-directed editing, touch reticle removal, authored break feedback, and bounded debris were implemented and validated with repository checks, browser smoke tests, and visual captures.
+
+---
+
+# Task Plan: dramatic terrain and topography upgrade
+
+## Goal
+
+Transform Nomio's procedural terrain into a diverse, striking playable landscape with distinct landforms, landmark-scale silhouettes, biome variation, and material cues while preserving deterministic chunk streaming.
+
+## Phases
+
+- [x] Phase 1: Audit the terrain, meshing, scene, and current visual baseline
+- [x] Phase 2: Implement layered biome and landform generation with landmark features
+- [x] Phase 3: Tune terrain material distribution and world presentation for readable visual contrast
+- [x] Phase 4: Verify determinism, streaming, build health, performance budget, and live visual captures
+
+## Key Questions
+
+1. Which height, biome, and feature signals can make the silhouette feel authored without introducing cross-chunk seams?
+2. How should block strata and landmark materials reinforce each biome at a distance and close up?
+3. How can the richer terrain remain fast enough for the existing worker, greedy mesher, and streaming budget?
+
+## Decisions Made
+
+- Retain deterministic, pure worker generation so saves and streaming remain compatible with the existing architecture.
+- Favor large-scale silhouettes first (ridges, cliffs, peaks, basins, coasts), then layer surface-biome detail and sparse landmarks.
+- Keep the existing vertical chunk window; relief rises from low basin floors to capped peaks instead of increasing storage, lighting, and mesh work per chunk.
+- Set the spawn on a nearby meadow shelf facing the first mountain fold so the game opens onto the new terrain rather than into a cliff.
+
+## Errors Encountered
+
+- None yet.
+
+## Status
+
+**Complete** - The terrain upgrade is implemented and verified through deterministic landform tests, full repository checks, worker generation timing, and live-browser visual captures.

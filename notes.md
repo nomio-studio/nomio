@@ -251,3 +251,22 @@
 - The break overlay now uses progressive opacity, a small stage-change pulse, double-sided crack faces, and explicit reset state; `GameSession` advances that pulse every frame.
 - Break debris uses one bounded `InstancedMesh` pool and tetrahedral shards, retaining palette tinting, collision-aware motion, spin, bounce, and fade with fewer triangles than cube fragments; flat shading keeps the facets readable.
 - Coarse-pointer CSS hides the desktop crosshair and centre target readout before JavaScript touch detection runs; pen input also activates the touch UI mode.
+
+## Terrain upgrade baseline
+
+- The existing generator samples a single five-octave 2D fBm signal, resulting in a narrow grass/dirt/stone height band (the live capture reads as gently stepped plains with no distinct silhouette).
+- The worker and streaming architecture is already well suited to a richer pure generator: chunks are generated off-thread, mesh uploads are budgeted, and every terrain query can remain world-coordinate deterministic.
+- The vertical chunk window is `y=-12..27`; the new landscape must create strong relief within that limit rather than expand chunk height and inflate generation, lighting, and mesh costs.
+- Available block vocabulary can communicate terrain character without new assets: sand for basins, netherrack for dry mesas, snow for alpine caps, mossy cobble for lush rock, obsidian plus crystal for rare landmarks, and logs/leaves for forest silhouettes.
+- Visual baseline capture: `/tmp/nomio-terrain-before.png` (flat, biome-neutral stepped terrain under an otherwise strong sky/fog presentation).
+
+## Terrain upgrade implementation
+
+- `sampleTerrainColumn()` now composes domain-warped continental land, rolling foothills, folded mountain ridges, dry terraced mesas, and carved riverbeds into one coordinate-only surface query. It resolves one of six biome families: basin, meadow, forest, badlands, alpine, or snow.
+- Surface and strata respond to that family: sand in basins and river cuts, grass/dirt in fertile ground, netherrack in mesas, stone and cobble talus in alpine rock, snow caps at elevation, and mossy cobble on forest cliffs. Deep deterministic hashes add sparse coal, iron, and obsidian seams.
+- Forests are stamped from a world-space lattice, not chunk-local randomness, so trunks and crowns continue cleanly across chunk borders. A lower-density lattice adds obsidian-rooted crystal spires in alpine/badland terrain.
+- The terrain schema is now version 2, intentionally invalidating edits generated against the previous single-height-field world. The default player spawn moved to `(-5.5, 26, -6.5)`, a meadow shelf looking north into the first mountain fold.
+- `/tmp/nomio-terrain-spawn.png` visually confirms a playable sand basin, tree-lined meadow, alpine walls, and snowy horizons in the real browser scene.
+- `npm run test:terrain` verifies 15 terrain invariants. A 225-chunk regional generation sample completed in 278.3 ms (1.24 ms/chunk) while producing every targeted surface/landmark material.
+- Final validation after formatting: typecheck, lint, Prettier, production build, save-system checks, voxel-format benchmark, and terrain suite all pass. The terrain suite measured 1.49 ms/chunk in its final run; the Vite worker bundle is 17.39 kB.
+- A fresh live browser capture had no page or console errors and streamed about 4.82 million terrain blocks. The headless rAF probe is deliberately not treated as a hardware performance result: Chrome reports the `SwiftShader Device (Subzero)` software renderer in this environment.

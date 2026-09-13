@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "bench:voxel-format": "node scripts/voxel-format-bench.ts",
     "test:saves": "node --no-warnings --experimental-transform-types --loader ./scripts/ts-loader.mjs scripts/save-system-test.ts",
+    "test:terrain": "node --no-warnings --experimental-transform-types --loader ./scripts/ts-loader.mjs scripts/terrain-landforms-test.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

@@ -23,7 +23,7 @@ export const VOXEL_DIMENSIONS: VoxelFormatDimensions = {
 };
 
 /** Bumped whenever the terrain generator changes shape, invalidating deltas. */
-const TERRAIN_SCHEMA = 1;
+const TERRAIN_SCHEMA = 2;
 
 const REGION_EXTENSION = ".nvrg";
 
