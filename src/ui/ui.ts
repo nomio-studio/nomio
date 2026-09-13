@@ -269,7 +269,7 @@ export class GameUi {
 
   /** Reveals touch controls on a hybrid device at the first real touch. */
   private readonly handleFirstPointerDown = (event: PointerEvent): void => {
-    if (event.pointerType !== "touch") {
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") {
       return;
     }
     this.root.classList.add("is-touch");

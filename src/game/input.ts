@@ -1,4 +1,9 @@
-export type GameAction = "place";
+export interface AimPoint {
+  /** Horizontal normalized device coordinate: -1 is the left edge, 1 the right. */
+  x: number;
+  /** Vertical normalized device coordinate: -1 is the bottom edge, 1 the top. */
+  y: number;
+}
 
 export interface InputState {
   moveX: number;
@@ -8,7 +13,14 @@ export interface InputState {
   jump: boolean;
   /** True while the break input is held; the interactor turns it into progress. */
   breaking: boolean;
-  actions: GameAction[];
+  /**
+   * Point the player is aiming at this frame, in normalized device coordinates.
+   * Touch and pen aim wherever the finger rests; a pointer-lock mouse aims at the
+   * screen centre. Null means nothing is aimed, e.g. an idle touch device.
+   */
+  aim: AimPoint | null;
+  /** A pending tap-to-place request, aimed at the block under this point. */
+  place: AimPoint | null;
 }
 
 export interface InputOptions {
@@ -32,6 +44,8 @@ const BLOCK_HOTKEY_SLOTS: Readonly<Record<string, number>> = {
   Equal: 11,
 };
 
+const SCREEN_CENTER: AimPoint = { x: 0, y: 0 };
+
 const clampUnit = (value: number): number => Math.min(1, Math.max(-1, value));
 
 /** Movement (CSS px) that turns a pending touch into a look drag instead of a tap. */
@@ -42,20 +56,21 @@ const LONG_PRESS_MS = 400;
 /**
  * Unifies keyboard, mouse, pen, and touch into one polled `InputState`.
  *
- * Keyboard and pointer-lock mice feed the digital paths. Touch and pen feed the
- * analog paths: a virtual stick supplies a continuous `moveX`/`moveZ`, and the
- * first non-mouse pointer on the canvas drives the view. That same canvas
- * pointer is also the edit gesture — a quick tap places, a stationary hold mines
- * while held, and moving past a small slop turns it into a drag-to-look. Mining
- * is reported as a held `breaking` flag rather than a stream of actions so the
- * interactor can animate one block's progress. Every pointer is tracked by id
- * and released on `pointerup`, `pointercancel`, blur, or tab hide, so a dropped
- * finger can never leave the player walking forever.
+ * Keyboard and pointer-lock mice feed the digital paths and aim at the screen
+ * centre. Touch and pen feed the analog paths: a virtual stick supplies a
+ * continuous `moveX`/`moveZ`, and the first non-mouse pointer on the canvas both
+ * drives the view and edits blocks wherever it lands. That pointer is a gesture —
+ * a quick tap places a block under the finger, a stationary hold mines the block
+ * under the finger while held, and moving past a small slop turns it into a
+ * drag-to-look that aims at nothing. Mining is reported as a held `breaking` flag
+ * rather than a stream of actions so the interactor can animate one block's
+ * progress. Every pointer is tracked by id and released on `pointerup`,
+ * `pointercancel`, blur, or tab hide, so a dropped finger can never leave the
+ * player walking forever.
  */
 export class InputManager {
   private readonly listeners = new AbortController();
   private readonly keys = new Set<string>();
-  private readonly actions: GameAction[] = [];
   private lookX = 0;
   private lookY = 0;
   private jump = false;
@@ -66,6 +81,8 @@ export class InputManager {
   private readonly lookOrigin = { x: 0, y: 0 };
   private readonly touchOrigin = { x: 0, y: 0 };
   private touchGesture: "pending" | "look" | "break" = "pending";
+  private touchAim: AimPoint | null = null;
+  private pendingPlace: AimPoint | null = null;
   private longPressTimer: number | null = null;
   private mouseBreaking = false;
   private touchBreaking = false;
@@ -116,10 +133,6 @@ export class InputManager {
     }
   }
 
-  public queueAction(action: GameAction): void {
-    this.actions.push(action);
-  }
-
   public dispose(): void {
     this.listeners.abort();
     this.clear();
@@ -167,13 +180,14 @@ export class InputManager {
       lookY: this.lookY,
       jump: this.jump,
       breaking: this.mouseBreaking || this.touchBreaking,
-      actions: [...this.actions],
+      aim: this.locked ? SCREEN_CENTER : this.touchAim,
+      place: this.pendingPlace,
     };
 
     this.lookX = 0;
     this.lookY = 0;
     this.jump = false;
-    this.actions.length = 0;
+    this.pendingPlace = null;
     return state;
   }
 
@@ -189,7 +203,7 @@ export class InputManager {
     this.canvas.addEventListener("pointerdown", this.handleCanvasPointerDown, { signal });
     this.canvas.addEventListener("pointermove", this.handleCanvasPointerMove, { signal });
     this.canvas.addEventListener("pointerup", this.handleCanvasPointerUp, { signal });
-    this.canvas.addEventListener("pointercancel", this.handleCanvasPointerUp, { signal });
+    this.canvas.addEventListener("pointercancel", this.handleCanvasPointerCancel, { signal });
     this.canvas.addEventListener("mousedown", this.handleMouseDown, { signal });
     this.canvas.addEventListener("mouseup", this.handleMouseUp, { signal });
     this.canvas.addEventListener("contextmenu", this.preventContextMenu, { signal });
@@ -231,7 +245,8 @@ export class InputManager {
     this.moveZ = 0;
     this.mouseBreaking = false;
     this.touchBreaking = false;
-    this.actions.length = 0;
+    this.touchAim = null;
+    this.pendingPlace = null;
     this.clearGestureTimers();
     if (this.lookPointerId !== null) {
       this.releaseLookPointer(this.lookPointerId);
@@ -270,6 +285,7 @@ export class InputManager {
     this.lookOrigin.y = event.clientY;
     this.touchOrigin.x = event.clientX;
     this.touchOrigin.y = event.clientY;
+    this.touchAim = this.toAim(event.clientX, event.clientY);
     this.touchGesture = "pending";
     this.armLongPress();
     try {
@@ -290,7 +306,7 @@ export class InputManager {
     this.lookOrigin.y = event.clientY;
 
     // Once the finger travels past the tap slop the gesture is a look drag: it
-    // cancels the pending tap and any in-progress mining.
+    // cancels the pending tap, clears the aim, and stops any in-progress mining.
     if (
       this.touchGesture !== "look" &&
       Math.hypot(event.clientX - this.touchOrigin.x, event.clientY - this.touchOrigin.y) >
@@ -298,12 +314,16 @@ export class InputManager {
     ) {
       this.touchGesture = "look";
       this.touchBreaking = false;
+      this.touchAim = null;
       this.clearGestureTimers();
     }
 
     if (this.touchGesture === "look") {
       this.lookX += deltaX * this.touchLookScale;
       this.lookY += deltaY * this.touchLookScale;
+    } else {
+      // While a tap or hold is pending, keep the edit aim under the finger.
+      this.touchAim = this.toAim(event.clientX, event.clientY);
     }
     event.preventDefault();
   };
@@ -313,9 +333,17 @@ export class InputManager {
       return;
     }
     const tapped = this.touchGesture === "pending";
+    const aim = this.touchAim;
     this.releaseLookPointer(event.pointerId);
-    if (tapped) {
-      this.queueAction("place");
+    if (tapped && aim) {
+      this.pendingPlace = aim;
+    }
+  };
+
+  /** Cancels a lost touch without turning it into an accidental placement. */
+  private readonly handleCanvasPointerCancel = (event: PointerEvent): void => {
+    if (event.pointerId === this.lookPointerId) {
+      this.releaseLookPointer(event.pointerId);
     }
   };
 
@@ -339,6 +367,7 @@ export class InputManager {
   private releaseLookPointer(pointerId: number): void {
     this.clearGestureTimers();
     this.touchBreaking = false;
+    this.touchAim = null;
     this.lookPointerId = null;
     this.touchGesture = "pending";
     try {
@@ -346,6 +375,17 @@ export class InputManager {
     } catch {
       // Capture may already have been released by the browser.
     }
+  }
+
+  /** Converts a client-space point to normalized device coordinates. */
+  private toAim(clientX: number, clientY: number): AimPoint {
+    const rect = this.canvas.getBoundingClientRect();
+    const width = rect.width || 1;
+    const height = rect.height || 1;
+    return {
+      x: ((clientX - rect.left) / width) * 2 - 1,
+      y: -((clientY - rect.top) / height) * 2 + 1,
+    };
   }
 
   private readonly handleMouseDown = (event: MouseEvent): void => {
@@ -356,7 +396,7 @@ export class InputManager {
     if (event.button === 0) {
       this.mouseBreaking = true;
     } else if (event.button === 2) {
-      this.queueAction("place");
+      this.pendingPlace = SCREEN_CENTER;
     }
   };
 

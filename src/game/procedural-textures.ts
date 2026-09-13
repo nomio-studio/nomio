@@ -396,14 +396,48 @@ export const createProceduralTexture = (
 };
 
 /**
- * Destroy-stage crack overlays drawn as transparent tiles. Stage 0 is a single
- * faint fissure and each later stage adds another branch and a little darkness,
- * so the overlay visibly spreads as a block is mined.
+ * Destroy-stage crack overlays drawn as transparent tiles. Every stage shares
+ * one seed so its fissures are a strict superset of the previous stage's: new
+ * branches spread outward and the existing ones darken, instead of the cracks
+ * jumping to fresh positions each step.
  */
 export const BREAK_STAGES = 10;
 
+/**
+ * Destroy overlays are larger than block tiles so the fissures stay crisp as
+ * they spread across a face.
+ */
+export const BREAK_TEXTURE_SIZE = 128;
+
+/** Shared seed so stage `n + 1` redraws every crack of stage `n` identically. */
+const BREAK_SEED = 0x5eed;
+
+interface FissurePoint {
+  x: number;
+  y: number;
+}
+
+const strokeFissure = (
+  context: CanvasRenderingContext2D,
+  points: readonly FissurePoint[],
+  offsetX: number,
+  offsetY: number,
+): void => {
+  const first = points[0];
+  if (!first) {
+    return;
+  }
+  context.beginPath();
+  context.moveTo(first.x + offsetX, first.y + offsetY);
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index] as FissurePoint;
+    context.lineTo(point.x + offsetX, point.y + offsetY);
+  }
+  context.stroke();
+};
+
 const drawBreakStage = (stage: number): HTMLCanvasElement => {
-  const size = TEXTURE_SIZE;
+  const size = BREAK_TEXTURE_SIZE;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -412,32 +446,66 @@ const drawBreakStage = (stage: number): HTMLCanvasElement => {
     throw new Error("2D canvas is required for destroy-stage textures");
   }
 
-  context.imageSmoothingEnabled = false;
+  context.imageSmoothingEnabled = true;
   context.lineCap = "round";
   context.lineJoin = "round";
-  const random = createRandom(0x5eed + stage * 977);
+  const random = createRandom(BREAK_SEED);
   const centre = size / 2;
-  const intensity = 0.3 + (stage / Math.max(1, BREAK_STAGES - 1)) * 0.44;
+  const progress = stage / Math.max(1, BREAK_STAGES - 1);
+
+  // A soft impact bruise deepens with progress so the block reads as weakening.
+  const bruise = context.createRadialGradient(centre, centre, 2, centre, centre, size * 0.44);
+  bruise.addColorStop(0, `rgba(8, 6, 5, ${(0.13 + progress * 0.2).toFixed(3)})`);
+  bruise.addColorStop(0.55, `rgba(8, 6, 5, ${(0.04 + progress * 0.09).toFixed(3)})`);
+  bruise.addColorStop(1, "rgba(8, 6, 5, 0)");
+  context.fillStyle = bruise;
+  context.fillRect(0, 0, size, size);
 
   for (let crack = 0; crack <= stage; crack += 1) {
-    const angle = random() * Math.PI * 2;
-    const directionX = Math.cos(angle);
-    const directionY = Math.sin(angle);
-    context.strokeStyle = `rgba(12, 9, 7, ${intensity.toFixed(3)})`;
-    context.lineWidth = random() > 0.72 ? 2 : 1;
+    const points: FissurePoint[] = [];
+    const startX = centre + (random() - 0.5) * size * 0.14;
+    const startY = centre + (random() - 0.5) * size * 0.14;
+    points.push({ x: startX, y: startY });
 
-    let x = centre + (random() - 0.5) * 6;
-    let y = centre + (random() - 0.5) * 6;
-    context.beginPath();
-    context.moveTo(x, y);
-    const steps = 4 + Math.floor(random() * 3);
+    let angle = random() * Math.PI * 2;
+    const steps = 4 + Math.floor(random() * 4);
+    let x = startX;
+    let y = startY;
     for (let step = 0; step < steps; step += 1) {
-      const length = size * 0.11 + random() * (size * 0.1);
-      x += directionX * length + (random() - 0.5) * 7;
-      y += directionY * length + (random() - 0.5) * 7;
-      context.lineTo(x, y);
+      angle += (random() - 0.5) * 0.9;
+      const segment = size * 0.085 + random() * size * 0.085;
+      x += Math.cos(angle) * segment;
+      y += Math.sin(angle) * segment;
+      points.push({ x, y });
     }
-    context.stroke();
+
+    const width = 1 + Math.round(random() * 2 * (0.7 + progress * 0.8));
+    // A soft dark smear, a pale chipped lip, then the dark core line, so each
+    // fissure reads as a groove with a raised edge instead of a flat stroke.
+    context.strokeStyle = `rgba(18, 13, 9, ${(0.1 + progress * 0.16).toFixed(3)})`;
+    context.lineWidth = width + 3;
+    strokeFissure(context, points, 0, 0);
+
+    context.strokeStyle = `rgba(255, 252, 244, ${(0.07 + progress * 0.13).toFixed(3)})`;
+    context.lineWidth = width + 1.5;
+    strokeFissure(context, points, 1.2, 1.2);
+
+    context.strokeStyle = `rgba(9, 7, 6, ${(0.4 + progress * 0.45).toFixed(3)})`;
+    context.lineWidth = width;
+    strokeFissure(context, points, 0, 0);
+  }
+
+  // Loose grit scattered around the impact.
+  const grit = 34 + stage * 12;
+  for (let index = 0; index < grit; index += 1) {
+    context.fillStyle = `rgba(12, 9, 7, ${(0.14 + random() * 0.34).toFixed(3)})`;
+    const grain = 1 + Math.floor(random() * 2);
+    context.fillRect(
+      centre + (random() - 0.5) * size * 0.52,
+      centre + (random() - 0.5) * size * 0.52,
+      grain,
+      grain,
+    );
   }
 
   return canvas;
@@ -446,8 +514,10 @@ const drawBreakStage = (stage: number): HTMLCanvasElement => {
 export const createBreakStageTexture = (stage: number): THREE.CanvasTexture => {
   const texture = new THREE.CanvasTexture(drawBreakStage(stage));
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestMipmapNearestFilter;
+  // Cracks are organic curves, so smooth filtering reads better than the
+  // nearest-filtered pixel art used for block tiles.
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
   texture.needsUpdate = true;
   return texture;

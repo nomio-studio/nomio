@@ -1,6 +1,7 @@
 import * as THREE from "three";
+import type { AimPoint } from "./input";
 import type { Aabb, BlockId, BlockTarget, VoxelPosition } from "./types";
-import { offsetVoxel, voxelKey } from "./types";
+import { offsetVoxel, sameVoxel, voxelKey } from "./types";
 import type { VoxelWorld } from "./world";
 import type { VoxelWorldRenderer } from "./world-renderer";
 
@@ -12,7 +13,8 @@ export interface InteractorOptions {
 
 export class VoxelInteractor {
   private readonly raycaster = new THREE.Raycaster();
-  private readonly screenCenter = new THREE.Vector2(0, 0);
+  private readonly screenPoint = new THREE.Vector2(0, 0);
+  private aim: AimPoint | null = null;
   private target: BlockTarget | null = null;
   private breakProgress = 0;
   private breakKey: string | null = null;
@@ -26,9 +28,31 @@ export class VoxelInteractor {
     this.raycaster.far = options.maxDistance;
   }
 
-  public update(): void {
-    this.raycaster.setFromCamera(this.screenCenter, this.camera);
-    this.target = this.renderer.pick(this.raycaster);
+  /**
+   * Re-picks the aimed block from a normalized-device-coordinate point. Passing
+   * null means nothing is aimed (an idle touch device), which clears the target
+   * highlight and any break overlay rather than falling back to screen centre.
+   */
+  public update(aim: AimPoint | null = null): void {
+    this.aim = aim;
+    if (!aim) {
+      this.target = null;
+      this.renderer.showTarget(null);
+      this.renderer.showBreakOverlay(null, 0);
+      return;
+    }
+
+    const nextTarget = this.pickAt(aim);
+    const targetChanged =
+      Boolean(this.target) !== Boolean(nextTarget) ||
+      (this.target !== null &&
+        nextTarget !== null &&
+        !sameVoxel(this.target.position, nextTarget.position));
+    if (targetChanged) {
+      this.breakProgress = 0;
+      this.breakKey = null;
+    }
+    this.target = nextTarget;
     this.renderer.showTarget(this.target);
     this.renderer.showBreakOverlay(this.target, this.breakProgress);
   }
@@ -84,12 +108,32 @@ export class VoxelInteractor {
     return true;
   }
 
+  /** Places `id` against the block currently aimed at (pointer-lock mice). */
   public placeBlock(id: BlockId): boolean {
-    if (!this.target) {
+    return this.placeAgainst(this.target, id);
+  }
+
+  /** Places `id` against the block under a tapped point (touch and pen). */
+  public placeBlockAt(aim: AimPoint, id: BlockId): boolean {
+    return this.placeAgainst(this.pickAt(aim), id);
+  }
+
+  public get currentTarget(): BlockTarget | null {
+    return this.target;
+  }
+
+  private pickAt(aim: AimPoint): BlockTarget | null {
+    this.screenPoint.set(aim.x, aim.y);
+    this.raycaster.setFromCamera(this.screenPoint, this.camera);
+    return this.renderer.pick(this.raycaster);
+  }
+
+  private placeAgainst(target: BlockTarget | null, id: BlockId): boolean {
+    if (!target) {
       return false;
     }
 
-    const position = offsetVoxel(this.target.position, this.target.normal);
+    const position = offsetVoxel(target.position, target.normal);
     if (this.world.has(position) || this.isInsidePlayer(position)) {
       return false;
     }
@@ -97,10 +141,6 @@ export class VoxelInteractor {
     this.world.set(position, id);
     this.changed();
     return true;
-  }
-
-  public get currentTarget(): BlockTarget | null {
-    return this.target;
   }
 
   private isInsidePlayer(position: VoxelPosition): boolean {
@@ -119,6 +159,6 @@ export class VoxelInteractor {
 
   private changed(): void {
     this.options.onWorldChanged?.();
-    this.update();
+    this.update(this.aim);
   }
 }

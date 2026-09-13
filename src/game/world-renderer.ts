@@ -12,7 +12,7 @@ import {
 import { BlockTextureAtlas } from "./texture-atlas";
 import { BREAK_STAGES, createBreakStageTexture } from "./procedural-textures";
 import type { TextureFace } from "./texture-types";
-import type { BlockTarget } from "./types";
+import { voxelKey, type BlockTarget } from "./types";
 import type { FogController } from "./fog";
 import type { GlobalIllumination } from "./global-illumination";
 import { ACCENT_COLOR } from "../ui/tokens";
@@ -45,6 +45,9 @@ export class VoxelWorldRenderer {
   private readonly chunkMeshes = new Map<string, THREE.Mesh>();
   private readonly materials: THREE.MeshStandardMaterial[];
   private readonly shadowChunkRadius: number;
+  private breakTargetKey: string | null = null;
+  private breakStage = -1;
+  private breakPulse = 0;
   private focus: ChunkCoordinate | null = null;
 
   public constructor(
@@ -90,6 +93,7 @@ export class VoxelWorldRenderer {
         depthWrite: false,
         alphaTest: 0.02,
         fog: false,
+        side: THREE.DoubleSide,
       }),
     );
     this.breakOverlay.name = "break-overlay";
@@ -200,13 +204,24 @@ export class VoxelWorldRenderer {
 
   /** Draws the destroy-stage crack overlay on the aimed block at `progress` 0..1. */
   public showBreakOverlay(target: BlockTarget | null, progress: number): void {
+    const material = this.breakOverlay.material as THREE.MeshBasicMaterial;
     if (!target || progress <= 0) {
       this.breakOverlay.visible = false;
+      this.breakOverlay.scale.setScalar(1);
+      this.breakTargetKey = null;
+      this.breakStage = -1;
+      this.breakPulse = 0;
+      material.opacity = 0;
       return;
     }
 
     const stage = Math.min(BREAK_STAGES - 1, Math.max(0, Math.floor(progress * BREAK_STAGES)));
-    const material = this.breakOverlay.material as THREE.MeshBasicMaterial;
+    const targetKey = voxelKey(target.position);
+    if (targetKey !== this.breakTargetKey || stage !== this.breakStage) {
+      this.breakTargetKey = targetKey;
+      this.breakStage = stage;
+      this.breakPulse = 1;
+    }
     const texture = this.breakTextures[stage];
     if (texture && material.map !== texture) {
       material.map = texture;
@@ -218,7 +233,17 @@ export class VoxelWorldRenderer {
       target.position.y + 0.5,
       target.position.z + 0.5,
     );
+    material.opacity = 0.28 + Math.min(1, progress) * 0.58;
     this.breakOverlay.visible = true;
+  }
+
+  /** Eases the short impact pulse applied whenever a crack stage advances. */
+  public updateBreakFeedback(delta: number): void {
+    if (!this.breakOverlay.visible) {
+      return;
+    }
+    this.breakPulse = Math.max(0, this.breakPulse - delta * 8);
+    this.breakOverlay.scale.setScalar(1 + this.breakPulse * 0.018);
   }
 
   public dispose(): void {

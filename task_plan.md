@@ -34,3 +34,38 @@ Develop and integrate a mature chunked terrain pipeline using OpenSimplex2 + fBm
 ## Status
 
 **Complete** - The terrain pipeline is integrated, structurally verified, browser-smoke-tested, visually inspected, documented, and ready for commit.
+
+---
+
+# Task Plan: touch-directed editing and break feedback refinement
+
+## Goal
+
+Make touch editing target the user's tap/hold position instead of the center crosshair, remove the touch reticle, and make block breaking feedback feel physical, readable, and bounded in cost.
+
+## Phases
+
+- [x] Phase 1: Trace current touch aim, HUD reticle, interactor, and debris contracts
+- [x] Phase 2: Implement touch-directed placement/mining and responsive HUD behavior
+- [x] Phase 3: Refine break-stage animation and pooled collision-aware debris
+- [x] Phase 4: Run type, lint, format, browser interaction, visual, and performance checks
+
+## Key Questions
+
+1. How can touch tap/hold raycasts use the active pointer position while desktop remains crosshair-driven?
+2. Which state changes must cancel a touch mine gesture or hide its indicator?
+3. How can richer debris avoid per-break allocations, excess draw calls, and persistent particles?
+
+## Decisions Made
+
+- Preserve the existing desktop crosshair workflow and only use pointer-position rays for touch editing.
+- Keep touch look and editing on one captured pointer, distinguishing tap, drag, and hold through the existing gesture state.
+- Keep break debris instanced and pooled; enrich motion, shape, tint, and collision response within a bounded capacity.
+
+## Errors Encountered
+
+- Existing uncommitted changes already contain an initial touch/break feedback pass; treat them as user-owned work and validate/refine in place.
+
+## Status
+
+**Complete** - Touch-directed editing, touch reticle removal, authored break feedback, and bounded debris were implemented and validated with repository checks, browser smoke tests, and visual captures.

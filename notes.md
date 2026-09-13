@@ -236,3 +236,18 @@
 - `npm run format:check`
 - `npm run build`
 - Local Vite smoke check plus manual/browser inspection of texture rendering, block selection, placement, and reset.
+
+## Touch editing and feedback refinement findings
+
+- The current uncommitted implementation already routes touch/pen gestures through normalized pointer coordinates: a stationary tap queues placement at that point, a long press holds mining at that point, and a drag becomes look input.
+- A real Playwright touch context at 390×844 reached `playing` with `#ui.is-touch`, no page or console errors, and `getComputedStyle(.crosshair).display === "none"`.
+- Non-center touch input at visible terrain coordinates successfully produced `Placed Grass`; a long press at a non-center coordinate successfully produced `Mined Grass` and decremented the live block count.
+- The current code still has fragile edges: coarse-pointer CSS should be a second reticle-removal path, aim state should reset mining/overlay state atomically when the target changes, and break feedback should emphasize a short impact pulse and grounded, palette-aware shards while keeping the instanced pool bounded.
+
+## Refinement implementation
+
+- `pointercancel` now releases a touch gesture without queuing a placement, preventing browser interruption events from becoming accidental edits.
+- `VoxelInteractor.update()` compares the next picked voxel before assigning it and clears mining progress immediately when the target changes or disappears.
+- The break overlay now uses progressive opacity, a small stage-change pulse, double-sided crack faces, and explicit reset state; `GameSession` advances that pulse every frame.
+- Break debris uses one bounded `InstancedMesh` pool and tetrahedral shards, retaining palette tinting, collision-aware motion, spin, bounce, and fade with fewer triangles than cube fragments; flat shading keeps the facets readable.
+- Coarse-pointer CSS hides the desktop crosshair and centre target readout before JavaScript touch detection runs; pen input also activates the touch UI mode.

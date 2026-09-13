@@ -3,7 +3,7 @@ import { DEFAULT_BLOCK_REGISTRY, type BlockRegistry } from "./block-registry";
 import { BreakParticles } from "./break-particles";
 import { ChunkStreamer } from "./chunk-streamer";
 import { createGameConfig, type GameConfig, type GameConfigOverrides } from "./config";
-import { InputManager } from "./input";
+import { InputManager, type AimPoint } from "./input";
 import { VoxelInteractor } from "./interactor";
 import { PlayerController } from "./player";
 import { SceneRuntime } from "./scene-runtime";
@@ -22,6 +22,9 @@ import {
 import type { GameShell } from "../ui/game-shell";
 import type { GameUi } from "../ui/ui";
 import type { UiSettings } from "../ui/settings";
+
+/** Progress milestones (as a fraction of the whole) at which a block sheds a chip. */
+const MINING_CHIP_STAGES = 6;
 
 export interface GameSessionOptions {
   shell: GameShell;
@@ -63,6 +66,8 @@ export class GameSession {
   private booted = false;
   private selectedIndex = 0;
   private selectedBlock: BlockId;
+  private chipStage = -1;
+  private readonly debrisPalettes = new Map<BlockId, readonly number[]>();
 
   public constructor(options: GameSessionOptions) {
     this.config = createGameConfig(options.config);
@@ -74,7 +79,6 @@ export class GameSession {
     }
     this.selectedBlock = initialBlock;
     this.terrain = new TerrainWorker(this.config.terrain, undefined, this.config.lighting);
-
     this.runtime = new SceneRuntime({ canvas: options.shell.canvas, config: this.config });
     this.worldRenderer = new VoxelWorldRenderer(this.runtime.scene, this.registry, {
       shadowChunkRadius: this.config.render.shadowChunkRadius,
@@ -99,7 +103,9 @@ export class GameSession {
       maxDistance: this.config.interaction.maxDistance,
       onWorldChanged: () => this.ui.setBlockCount(this.world.size),
     });
-    this.breakParticles = new BreakParticles(this.runtime.scene);
+    this.breakParticles = new BreakParticles(this.runtime.scene, (x, y, z) =>
+      this.world.has({ x, y, z }),
+    );
     this.streamer = new ChunkStreamer({
       world: this.world,
       renderer: this.worldRenderer,
@@ -274,13 +280,12 @@ export class GameSession {
     }
     this.runtime.setFocus(this.player.position.x, this.player.position.z);
 
-    this.interactor.update();
+    this.interactor.update(inputState.aim);
     this.updateMining(delta, inputState.breaking);
-    for (const action of inputState.actions) {
-      if (action === "place") {
-        this.handlePlace();
-      }
+    if (inputState.place) {
+      this.handlePlace(inputState.place);
     }
+    this.worldRenderer.updateBreakFeedback(delta);
     this.breakParticles.update(delta);
 
     const target = this.interactor.currentTarget;
@@ -293,24 +298,54 @@ export class GameSession {
     this.frameHandle = window.requestAnimationFrame(this.frame);
   }
 
-  /** Advances mining while the break input is held, breaking at full progress. */
+  /**
+   * Advances mining while the break input is held. As the block weakens it sheds
+   * small chips; at full progress it bursts and is removed.
+   */
   private updateMining(delta: number, breaking: boolean): void {
     const target = this.interactor.currentTarget;
     const id = target ? this.world.get(target.position) : null;
     if (!breaking || !target || !id) {
       this.interactor.clearMining();
+      this.chipStage = -1;
       return;
     }
 
+    const definition = this.registry.get(id);
+    const palette = this.debrisPalette(id);
+    if (this.interactor.miningProgress === 0) {
+      this.chipStage = -1;
+    }
     if (this.interactor.advanceMining(delta, this.config.interaction.breakDuration)) {
-      this.breakParticles.burst(target.position, this.registry.get(id).color);
+      this.chipStage = -1;
+      this.breakParticles.burst(target.position, palette);
       this.runtime.resetTemporal();
-      this.ui.pushToast(`Mined ${this.registry.get(id).label}`, "info");
+      this.ui.pushToast(`Mined ${definition.label}`, "info");
+      return;
+    }
+
+    const stage = Math.floor(this.interactor.miningProgress * MINING_CHIP_STAGES);
+    if (stage > this.chipStage) {
+      this.chipStage = stage;
+      this.breakParticles.chip(target.position, palette);
     }
   }
 
-  private handlePlace(): void {
-    if (this.interactor.placeBlock(this.selectedBlock)) {
+  /** Debris takes its colors from the broken block's own texture palette. */
+  private debrisPalette(id: BlockId): readonly number[] {
+    const cached = this.debrisPalettes.get(id);
+    if (cached) {
+      return cached;
+    }
+    const palette = this.registry
+      .get(id)
+      .texture.palette.map((hex) => new THREE.Color(hex).getHex());
+    this.debrisPalettes.set(id, palette);
+    return palette;
+  }
+
+  private handlePlace(aim: AimPoint): void {
+    if (this.interactor.placeBlockAt(aim, this.selectedBlock)) {
       this.runtime.resetTemporal();
       this.ui.pushToast(`Placed ${this.registry.get(this.selectedBlock).label}`, "success");
     }
@@ -380,6 +415,7 @@ export class GameSession {
     this.streamer.reset();
     void this.persistence.clear();
     this.interactor.clearMining();
+    this.chipStage = -1;
     this.breakParticles.clear();
     this.interactor.update();
     this.ui.setBlockCount(this.world.size);

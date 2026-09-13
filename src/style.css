@@ -837,6 +837,11 @@ kbd {
   display: none;
 }
 
+/* Touch has no fixed aim point, so the centre target readout is meaningless. */
+#ui.is-touch .readout--target {
+  display: none;
+}
+
 .controls-list__touch {
   display: none;
 }
@@ -1180,6 +1185,12 @@ kbd {
 @media (pointer: coarse) {
   #game-canvas {
     cursor: default;
+  }
+
+  /* Capability media is the fallback before the first touch event toggles the UI class. */
+  #ui .crosshair,
+  #ui .readout--target {
+    display: none;
   }
 }
 
