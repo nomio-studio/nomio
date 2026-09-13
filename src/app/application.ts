@@ -44,7 +44,6 @@ export class NomioApplication {
       onReset: () => this.session?.reset(),
       onSettingsChange: (settings) => this.session?.applyUiSettings(settings),
       onSelectBlock: (id) => this.session?.selectBlock(id),
-      onAction: (action) => this.session?.queueAction(action),
       onMove: (x, z) => this.session?.setMoveVector(x, z),
       onJump: () => this.session?.requestJump(),
       onLoadSave: (mapId, saveId) => void this.loadSave(mapId, saveId),

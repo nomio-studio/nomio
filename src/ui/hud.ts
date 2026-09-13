@@ -1,5 +1,4 @@
 import type { BlockRegistry } from "../game/block-registry";
-import type { GameAction } from "../game/input";
 import type { BlockId } from "../game/types";
 import { formatSlotKey, requireElement, setRovingTabIndex } from "./dom";
 import { TouchControls } from "./touch-controls";
@@ -7,7 +6,6 @@ import { TouchControls } from "./touch-controls";
 export interface HudOptions {
   registry: BlockRegistry;
   onSelectBlock: (id: BlockId) => void;
-  onAction: (action: GameAction) => void;
   onMove: (x: number, z: number) => void;
   onJump: () => void;
   onPause: () => void;
@@ -119,7 +117,6 @@ export class Hud {
     this.slots = [...this.hotbar.querySelectorAll<HTMLButtonElement>("[data-block]")];
     this.touchControls = new TouchControls(this.root, {
       onMove: options.onMove,
-      onAction: options.onAction,
       onJump: options.onJump,
     });
     this.bindEvents();

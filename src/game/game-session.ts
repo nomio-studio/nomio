@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { DEFAULT_BLOCK_REGISTRY, type BlockRegistry } from "./block-registry";
 import { ChunkStreamer } from "./chunk-streamer";
 import { createGameConfig, type GameConfig, type GameConfigOverrides } from "./config";
-import { type GameAction, InputManager } from "./input";
+import { InputManager } from "./input";
 import { VoxelInteractor } from "./interactor";
 import { PlayerController } from "./player";
 import { SceneRuntime } from "./scene-runtime";
@@ -207,10 +207,6 @@ export class GameSession {
       return;
     }
     this.selectBlockByIndex(index);
-  }
-
-  public queueAction(action: GameAction): void {
-    this.input.queueAction(action);
   }
 
   public setMoveVector(x: number, z: number): void {

@@ -14,6 +14,10 @@ export interface PlayerConfig {
   gravity: number;
   jumpVelocity: number;
   lookSensitivity: number;
+  /** Hop automatically when walking into an obstacle no taller than `stepHeight`. */
+  autoJump: boolean;
+  /** Tallest ledge auto-jump will climb, in blocks. */
+  stepHeight: number;
   spawn: readonly [number, number, number];
   fallResetY: number;
 }
@@ -165,10 +169,12 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     width: 0.6,
     height: 1.8,
     eyeHeight: 1.62,
-    speed: 4.2,
+    speed: 5.2,
     gravity: 18,
     jumpVelocity: 6.4,
-    lookSensitivity: 0.0022,
+    lookSensitivity: 0.003,
+    autoJump: true,
+    stepHeight: 1,
     spawn: [0.5, 14, 5.5],
     fallResetY: -24,
   },

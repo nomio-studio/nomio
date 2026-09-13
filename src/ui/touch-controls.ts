@@ -1,32 +1,25 @@
-import type { GameAction } from "../game/input";
 import { requireElement } from "./dom";
 
 export interface TouchControlsOptions {
   /** Analog movement: `x` strafes right, `z` walks forward, both in -1..1. */
   onMove: (x: number, z: number) => void;
-  /** A discrete mine or place request. Called again while a button is held. */
-  onAction: (action: GameAction) => void;
   onJump: () => void;
 }
-
-type TouchButtonKind = GameAction | "jump";
 
 /** Maximum knob travel in CSS pixels; also the visual base radius. */
 const STICK_TRAVEL = 58;
 /** Fraction of travel ignored around the centre, then rescaled to full range. */
 const DEAD_ZONE = 0.16;
 const EDGE_PADDING = 20;
-/** Time a mine/place button must be held before it starts repeating. */
-const HOLD_DELAY_MS = 280;
-const REPEAT_INTERVAL_MS = 170;
 
 /**
- * On-screen controls for touch devices: a floating analog stick on the left
- * (drag the view with the right thumb) and Mine / Place / Jump buttons.
+ * On-screen controls for touch devices: a floating analog stick on the left and
+ * a Jump button on the right. Looking, mining, and placing are gestures on the
+ * canvas itself — drag to look, tap to place, hold to mine — so the screen stays
+ * clear of reticle controls.
  *
  * The stick is "floating" so a player can grab it anywhere in the left zone
- * rather than hunting for a fixed pad. Mine and Place fire on press and then
- * repeat while held, which matches mouse click-and-hold without an edit timer.
+ * rather than hunting for a fixed pad.
  */
 export class TouchControls {
   private readonly listeners = new AbortController();
@@ -34,12 +27,10 @@ export class TouchControls {
   private readonly zone: HTMLElement;
   private readonly base: HTMLElement;
   private readonly knob: HTMLElement;
-  private readonly buttons: HTMLButtonElement[];
+  private readonly jumpButton: HTMLButtonElement;
   private readonly resizeObserver: ResizeObserver;
   private movePointerId: number | null = null;
   private readonly start = { x: 0, y: 0 };
-  private holdTimer: number | null = null;
-  private repeatTimer: number | null = null;
 
   public constructor(
     container: HTMLElement,
@@ -55,8 +46,6 @@ export class TouchControls {
           </div>
         </div>
         <div class="touch-actions" role="group" aria-label="Touch actions">
-          <button class="touch-button" type="button" data-touch="break" aria-label="Mine block">Mine</button>
-          <button class="touch-button" type="button" data-touch="place" aria-label="Place block">Place</button>
           <button class="touch-button touch-button--jump" type="button" data-touch="jump" aria-label="Jump">Jump</button>
         </div>
       </div>
@@ -67,10 +56,10 @@ export class TouchControls {
     this.zone = requireElement<HTMLElement>(container, "#touch-move");
     this.base = requireElement<HTMLElement>(container, "#touch-base");
     this.knob = requireElement<HTMLElement>(container, "#touch-knob");
-    this.buttons = [...container.querySelectorAll<HTMLButtonElement>("[data-touch]")];
+    this.jumpButton = requireElement<HTMLButtonElement>(container, "[data-touch='jump']");
 
     this.bindStick();
-    this.bindButtons();
+    this.bindJump();
     this.resizeObserver = new ResizeObserver(() => this.resetStick());
     this.resizeObserver.observe(this.zone);
     this.resetStick();
@@ -78,7 +67,6 @@ export class TouchControls {
 
   public dispose(): void {
     this.listeners.abort();
-    this.clearHold();
     this.resizeObserver.disconnect();
     this.layer.remove();
   }
@@ -94,23 +82,27 @@ export class TouchControls {
     document.addEventListener("visibilitychange", this.handleVisibilityChange, { signal });
   }
 
-  private bindButtons(): void {
+  private bindJump(): void {
     const { signal } = this.listeners;
-    for (const button of this.buttons) {
-      const kind = button.dataset.touch as TouchButtonKind | undefined;
-      if (!kind) {
-        continue;
-      }
-      button.addEventListener(
-        "pointerdown",
-        (event) => this.handleButtonDown(event, button, kind),
-        {
-          signal,
-        },
-      );
-      button.addEventListener("pointerup", () => this.handleButtonUp(button), { signal });
-      button.addEventListener("pointercancel", () => this.handleButtonUp(button), { signal });
-      button.addEventListener("lostpointercapture", () => this.handleButtonUp(button), { signal });
+    this.jumpButton.addEventListener(
+      "pointerdown",
+      (event) => {
+        event.preventDefault();
+        try {
+          this.jumpButton.setPointerCapture(event.pointerId);
+        } catch {
+          // Capture is best-effort.
+        }
+        this.jumpButton.classList.add("is-pressed");
+        this.options.onJump();
+      },
+      { signal },
+    );
+
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
+      this.jumpButton.addEventListener(type, () => this.jumpButton.classList.remove("is-pressed"), {
+        signal,
+      });
     }
   }
 
@@ -168,55 +160,6 @@ export class TouchControls {
     this.resetStick();
   };
 
-  private handleButtonDown(
-    event: PointerEvent,
-    button: HTMLButtonElement,
-    kind: TouchButtonKind,
-  ): void {
-    event.preventDefault();
-    try {
-      button.setPointerCapture(event.pointerId);
-    } catch {
-      // Capture is best-effort.
-    }
-    button.classList.add("is-pressed");
-
-    if (kind === "jump") {
-      this.options.onJump();
-      return;
-    }
-
-    this.options.onAction(kind);
-    this.startHold(kind);
-  }
-
-  private handleButtonUp(button: HTMLButtonElement): void {
-    button.classList.remove("is-pressed");
-    this.clearHold();
-  }
-
-  private startHold(action: GameAction): void {
-    this.clearHold();
-    this.holdTimer = window.setTimeout(() => {
-      this.holdTimer = null;
-      this.repeatTimer = window.setInterval(
-        () => this.options.onAction(action),
-        REPEAT_INTERVAL_MS,
-      );
-    }, HOLD_DELAY_MS);
-  }
-
-  private clearHold(): void {
-    if (this.holdTimer !== null) {
-      window.clearTimeout(this.holdTimer);
-      this.holdTimer = null;
-    }
-    if (this.repeatTimer !== null) {
-      window.clearInterval(this.repeatTimer);
-      this.repeatTimer = null;
-    }
-  }
-
   private readonly handleVisibilityChange = (): void => {
     if (document.hidden) {
       this.releaseAll();
@@ -224,10 +167,7 @@ export class TouchControls {
   };
 
   private readonly releaseAll = (): void => {
-    this.clearHold();
-    for (const button of this.buttons) {
-      button.classList.remove("is-pressed");
-    }
+    this.jumpButton.classList.remove("is-pressed");
     if (this.movePointerId !== null) {
       const pointerId = this.movePointerId;
       this.movePointerId = null;

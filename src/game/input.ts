@@ -32,14 +32,24 @@ const BLOCK_HOTKEY_SLOTS: Readonly<Record<string, number>> = {
 
 const clampUnit = (value: number): number => Math.min(1, Math.max(-1, value));
 
+/** Movement (CSS px) that turns a pending touch into a look drag instead of a tap. */
+const TAP_MOVE_TOLERANCE = 16;
+/** Hold time before a stationary touch fires a break. */
+const LONG_PRESS_MS = 400;
+/** Interval between repeat breaks while a long press is held. */
+const BREAK_REPEAT_MS = 180;
+
 /**
  * Unifies keyboard, mouse, pen, and touch into one polled `InputState`.
  *
  * Keyboard and pointer-lock mice feed the digital paths. Touch and pen feed the
  * analog paths: a virtual stick supplies a continuous `moveX`/`moveZ`, and the
- * first non-mouse pointer on the canvas drags the view. Every pointer is tracked
- * by id and released on `pointerup`, `pointercancel`, blur, or tab hide, so a
- * dropped finger can never leave the player walking forever.
+ * first non-mouse pointer on the canvas drives the view. That same canvas
+ * pointer is also the edit gesture — a quick tap places, a stationary hold
+ * breaks (repeating while held), and moving past a small slop turns it into a
+ * drag-to-look. Every pointer is tracked by id and released on `pointerup`,
+ * `pointercancel`, blur, or tab hide, so a dropped finger can never leave the
+ * player walking forever.
  */
 export class InputManager {
   private readonly listeners = new AbortController();
@@ -53,6 +63,10 @@ export class InputManager {
   private touchLookScale = 1;
   private lookPointerId: number | null = null;
   private readonly lookOrigin = { x: 0, y: 0 };
+  private readonly touchOrigin = { x: 0, y: 0 };
+  private touchGesture: "pending" | "look" | "break" = "pending";
+  private longPressTimer: number | null = null;
+  private breakRepeatTimer: number | null = null;
   private locked = false;
   private interactive = true;
 
@@ -208,6 +222,7 @@ export class InputManager {
     this.moveX = 0;
     this.moveZ = 0;
     this.actions.length = 0;
+    this.clearGestureTimers();
     if (this.lookPointerId !== null) {
       this.releaseLookPointer(this.lookPointerId);
     }
@@ -233,13 +248,17 @@ export class InputManager {
       }
       return;
     }
-    if (this.lookPointerId !== null) {
+    if (!this.interactive || this.lookPointerId !== null) {
       return;
     }
 
     this.lookPointerId = event.pointerId;
     this.lookOrigin.x = event.clientX;
     this.lookOrigin.y = event.clientY;
+    this.touchOrigin.x = event.clientX;
+    this.touchOrigin.y = event.clientY;
+    this.touchGesture = "pending";
+    this.armLongPress();
     try {
       this.canvas.setPointerCapture(event.pointerId);
     } catch {
@@ -252,10 +271,26 @@ export class InputManager {
     if (event.pointerId !== this.lookPointerId) {
       return;
     }
-    this.lookX += (event.clientX - this.lookOrigin.x) * this.touchLookScale;
-    this.lookY += (event.clientY - this.lookOrigin.y) * this.touchLookScale;
+    const deltaX = event.clientX - this.lookOrigin.x;
+    const deltaY = event.clientY - this.lookOrigin.y;
     this.lookOrigin.x = event.clientX;
     this.lookOrigin.y = event.clientY;
+
+    // Once the finger travels past the tap slop the gesture is a look drag: it
+    // cancels the pending tap/long press and ignores any break repetition.
+    if (
+      this.touchGesture !== "look" &&
+      Math.hypot(event.clientX - this.touchOrigin.x, event.clientY - this.touchOrigin.y) >
+        TAP_MOVE_TOLERANCE
+    ) {
+      this.touchGesture = "look";
+      this.clearGestureTimers();
+    }
+
+    if (this.touchGesture === "look") {
+      this.lookX += deltaX * this.touchLookScale;
+      this.lookY += deltaY * this.touchLookScale;
+    }
     event.preventDefault();
   };
 
@@ -263,11 +298,39 @@ export class InputManager {
     if (event.pointerId !== this.lookPointerId) {
       return;
     }
+    const tapped = this.touchGesture === "pending";
     this.releaseLookPointer(event.pointerId);
+    if (tapped) {
+      this.queueAction("place");
+    }
   };
 
+  /** Fires a break once the touch has been held still long enough. */
+  private armLongPress(): void {
+    this.clearGestureTimers();
+    this.longPressTimer = window.setTimeout(() => {
+      this.longPressTimer = null;
+      this.touchGesture = "break";
+      this.queueAction("break");
+      this.breakRepeatTimer = window.setInterval(() => this.queueAction("break"), BREAK_REPEAT_MS);
+    }, LONG_PRESS_MS);
+  }
+
+  private clearGestureTimers(): void {
+    if (this.longPressTimer !== null) {
+      window.clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+    if (this.breakRepeatTimer !== null) {
+      window.clearInterval(this.breakRepeatTimer);
+      this.breakRepeatTimer = null;
+    }
+  }
+
   private releaseLookPointer(pointerId: number): void {
+    this.clearGestureTimers();
     this.lookPointerId = null;
+    this.touchGesture = "pending";
     try {
       this.canvas.releasePointerCapture(pointerId);
     } catch {

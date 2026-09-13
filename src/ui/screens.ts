@@ -94,7 +94,9 @@ export class TitleScreen {
             <div class="controls-list__pointer"><dt><kbd>Esc</kbd></dt><dd>Pause</dd></div>
             <div class="controls-list__touch"><dt>Stick</dt><dd>Move</dd></div>
             <div class="controls-list__touch"><dt>Drag</dt><dd>Look around</dd></div>
-            <div class="controls-list__touch"><dt>Mine · Place · Jump</dt><dd>On-screen buttons</dd></div>
+            <div class="controls-list__touch"><dt>Tap</dt><dd>Place a block</dd></div>
+            <div class="controls-list__touch"><dt>Hold</dt><dd>Mine a block</dd></div>
+            <div class="controls-list__touch"><dt>Jump</dt><dd>On-screen button</dd></div>
             <div class="controls-list__touch"><dt>Palette</dt><dd>Tap a material</dd></div>
             <div class="controls-list__touch"><dt>Pause</dt><dd>Top-right button</dd></div>
           </dl>

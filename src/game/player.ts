@@ -87,17 +87,49 @@ export class PlayerController {
   }
 
   private moveHorizontal(deltaX: number, deltaZ: number): void {
-    this.nextPosition.copy(this.position);
-    this.nextPosition.x += deltaX;
-    if (this.world.canOccupy(this.boundsFor(this.nextPosition))) {
-      this.position.x = this.nextPosition.x;
+    if (deltaX !== 0) {
+      this.nextPosition.copy(this.position);
+      this.nextPosition.x += deltaX;
+      if (this.world.canOccupy(this.boundsFor(this.nextPosition))) {
+        this.position.x = this.nextPosition.x;
+      } else {
+        this.tryAutoJump(deltaX, 0);
+      }
     }
 
-    this.nextPosition.copy(this.position);
-    this.nextPosition.z += deltaZ;
-    if (this.world.canOccupy(this.boundsFor(this.nextPosition))) {
-      this.position.z = this.nextPosition.z;
+    if (deltaZ !== 0) {
+      this.nextPosition.copy(this.position);
+      this.nextPosition.z += deltaZ;
+      if (this.world.canOccupy(this.boundsFor(this.nextPosition))) {
+        this.position.z = this.nextPosition.z;
+      } else {
+        this.tryAutoJump(0, deltaZ);
+      }
     }
+  }
+
+  /**
+   * Hops automatically when a horizontal step is blocked by an obstacle no taller
+   * than `stepHeight`, so walking into a one-block ledge never stalls the player.
+   * The raised probe also proves there is headroom, so a two-block wall still
+   * simply blocks instead of triggering a hopeless jump.
+   */
+  private tryAutoJump(deltaX: number, deltaZ: number): void {
+    if (!this.config.autoJump || !this.grounded) {
+      return;
+    }
+
+    this.nextPosition.set(
+      this.position.x + deltaX,
+      this.position.y + this.config.stepHeight,
+      this.position.z + deltaZ,
+    );
+    if (!this.world.canOccupy(this.boundsFor(this.nextPosition))) {
+      return;
+    }
+
+    this.verticalVelocity = this.config.jumpVelocity;
+    this.grounded = false;
   }
 
   private moveVertical(deltaY: number): void {

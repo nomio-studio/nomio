@@ -30,7 +30,7 @@ Pushes to `main` build and publish the game to GitHub Pages through `.github/wor
 
 ## Controls
 
-- `WASD` or arrow keys: move
+- `WASD` or arrow keys: move (a one-block ledge is hopped automatically)
 - Mouse: look around after selecting “Enter the island”
 - `Space`: hop
 - Left mouse button: mine the highlighted block
@@ -39,7 +39,7 @@ Pushes to `main` build and publish the game to GitHub Pages through `.github/wor
 - `[` / `]`: cycle through all materials
 - `Esc`: pause (Resume, Settings, Reset, Return to title)
 - Click a material swatch in the palette to select any block
-- Touch: a floating analog stick moves, dragging elsewhere looks, and the Mine / Place / Jump buttons act on the aimed block; tap a material to select it
+- Touch: a floating analog stick moves, dragging looks, tap places, and hold mines; the Jump button hops
 
 ## Architecture
 
@@ -92,7 +92,7 @@ src/
 │   ├── settings.ts        # Persisted UI settings and normalization
 │   ├── toasts.ts          # Transient action feedback
 │   ├── tokens.ts          # Shared palette/three.js color tokens
-│   ├── touch-controls.ts  # Analog stick and Mine / Place / Jump buttons
+│   ├── touch-controls.ts  # Analog stick and Jump button (look/tap/hold gestures live in input.ts)
 │   └── ui.ts              # Screen state machine and UI composition
 ├── main.ts                # Minimal browser bootstrap
 └── style.css              # Responsive field-note interface
@@ -114,7 +114,7 @@ Chunks are shaded with smooth lighting and vertex ambient occlusion. Before a ch
 
 The interface has its own state machine (`src/ui/ui.ts`) with four states — loading, title, playing, and paused — that drives which screen is visible and keeps the gameplay layer free of DOM code. An application-owned `GameUi` composes the loading screen, title, HUD, native `<dialog>` pause/settings/reset surfaces, a polite toast region, and the **worlds/saves library** (`src/ui/library.ts`), from which the player creates, renames, duplicates, deletes, and opens worlds and saves. `GameSession` posts state to `GameUi` and subscribes to it but never owns it, which lets the application swap sessions without rebuilding the interface. Settings (look sensitivity, touch sensitivity, field of view, invert look, control hints, reduced motion) are normalized, persisted to `localStorage`, and applied live; every command has a keyboard path, focus moves into dialogs and returns on close, the hotbar uses a roving tabindex, and game feedback appears as transient toasts. The stylesheet declares the palette as custom properties and honors `prefers-reduced-motion`, `prefers-reduced-transparency`, and `prefers-contrast`.
 
-Touch devices are detected from `navigator.maxTouchPoints` (falling back to the coarse-pointer query) and the UI is marked `is-touch`, which reveals `src/ui/touch-controls.ts` instead of the keyboard hints. Movement is a floating analog stick: touching anywhere in the left zone drops the base under the thumb and emits a dead-zoned, magnitude-preserving vector, so a half-push walks slowly. `InputManager` tracks the first non-mouse pointer on the canvas by id for look, scaled by a separate touch sensitivity, while any number of other pointers drive the stick and buttons, so both thumbs work at once. Mine and Place fire on press and repeat while held, Jump is a single action, every pointer has `touch-action: none` and pointer capture, and blur, `visibilitychange`, and `pointercancel` all release inputs so a dropped finger can never leave the player walking. The layout respects `env(safe-area-inset-*)` for notches and home indicators, and pointer lock is skipped entirely on touch.
+Touch devices are detected from `navigator.maxTouchPoints` (falling back to the coarse-pointer query) and the UI is marked `is-touch`, which reveals the `src/ui/touch-controls.ts` stick and Jump button instead of the keyboard hints. Movement is a floating analog stick: touching anywhere in the left zone drops the base under the thumb and emits a dead-zoned, magnitude-preserving vector, so a half-push walks slowly. The first non-mouse pointer on the canvas is both the view and the edit gesture, scaled by a separate touch sensitivity: moving past a small slop drags the view, a quick tap places the selected block on the aimed face, and a stationary hold mines the aimed block and keeps mining while held. Jump is a single action, every pointer has `touch-action: none` and pointer capture, and blur, `visibilitychange`, and `pointercancel` all release inputs so a dropped finger can never leave the player walking. The layout respects `env(safe-area-inset-*)` for notches and home indicators, and pointer lock is skipped entirely on touch.
 
 Anti-aliasing runs through `RenderPipeline`. The scene renders into a linear HDR target from a camera jittered by a Halton(2,3) sequence; a temporal pass reprojects the previous resolved frame using depth and the camera matrices, variance-clips the history in YCoCg to remove ghosting without smearing, and scales the history weight down as motion grows. A final composite applies a clamped unsharp mask (to counter temporal softness), exposure, tone mapping, and the sRGB encode. Sky pixels are reprojected as directions so the rotating skybox does not smear. History resets on teleport, world reset, time-of-day jumps, and player edits. Tone mapping moved out of the materials and into the composite, so the scene pass stays in linear HDR; when the pipeline is disabled or WebGL2 is unavailable, rendering falls back to the direct tone-mapped path.
 

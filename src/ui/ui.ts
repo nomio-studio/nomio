@@ -1,5 +1,4 @@
 import type { BlockRegistry } from "../game/block-registry";
-import type { GameAction } from "../game/input";
 import type { SaveLibraryController } from "../game/save-system";
 import type { BlockId } from "../game/types";
 import { PauseMenu, ResetDialog, SettingsPanel } from "./dialogs";
@@ -25,7 +24,6 @@ export interface GameUiOptions {
   onSettingsChange: (settings: UiSettings) => void;
   onStateChange?: (state: UiState) => void;
   onSelectBlock: (id: BlockId) => void;
-  onAction: (action: GameAction) => void;
   onMove: (x: number, z: number) => void;
   onJump: () => void;
   /** Fired when a save is opened from the library. */
@@ -70,7 +68,6 @@ export class GameUi {
     this.hud = new Hud(root, {
       registry: options.registry,
       onSelectBlock: options.onSelectBlock,
-      onAction: options.onAction,
       onMove: options.onMove,
       onJump: options.onJump,
       onPause: options.onPause,
