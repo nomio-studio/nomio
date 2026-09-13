@@ -46,13 +46,19 @@ export class PlayerController {
     const pitchDelta = input.lookY * this.lookSensitivity * (this.invertLook ? 1 : -1);
     this.pitch = THREE.MathUtils.clamp(this.pitch + pitchDelta, -1.35, 1.35);
 
-    this.movement.set(input.moveX, 0, -input.moveZ);
+    this.movement.set(input.moveX, 0, input.moveZ);
     if (this.movement.lengthSq() > 1) {
       this.movement.normalize();
     }
 
-    this.forward.set(Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    this.right.set(Math.cos(this.yaw), 0, Math.sin(this.yaw));
+    // Camera-relative basis. A Three.js camera looks down -Z, so after a yaw
+    // rotation the ground-plane forward is (-sin, 0, -cos) and right is
+    // (cos, 0, -sin). Deriving both from the same yaw keeps W/A/S/D aligned
+    // with where the camera actually points at every heading.
+    const sinYaw = Math.sin(this.yaw);
+    const cosYaw = Math.cos(this.yaw);
+    this.forward.set(-sinYaw, 0, -cosYaw);
+    this.right.set(cosYaw, 0, -sinYaw);
     this.direction
       .set(0, 0, 0)
       .addScaledVector(this.right, this.movement.x)

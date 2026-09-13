@@ -48,7 +48,7 @@ export class FogController {
     const uniforms = this.uniforms;
     // Distance haze takes the horizon color, nudged toward the ground hue so it
     // reads as atmosphere rather than a flat wall of color.
-    uniforms.uFogColor.value.copy(palette.horizon).lerp(palette.ground, 0.25);
+    uniforms.uFogColor.value.copy(palette.horizon).lerp(palette.ground, 0.12);
     uniforms.uFogSunColor.value.copy(palette.sun);
     uniforms.uFogSunDirection.value.copy(sunDirection).normalize();
     // Dusk and dawn produce the strongest directional glow.

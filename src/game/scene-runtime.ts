@@ -233,12 +233,16 @@ export class SceneRuntime {
   private applyLighting(): void {
     const palette = this.palette;
     this.sun.color.copy(palette.sun);
-    this.sun.intensity = 0.15 + palette.sunIntensity * 3.0;
+    this.sun.intensity = 0.28 + palette.sunIntensity * 2.95;
     this.hemisphere.color.copy(palette.zenith);
     this.hemisphere.groundColor.copy(palette.ground);
-    this.hemisphere.intensity = 0.45 + palette.sunIntensity * 1.7;
+    // Low sun means dusk/night: add a small fill so the island keeps its shape
+    // instead of reading as a flat silhouette. The term is zero at noon, so the
+    // daytime contrast is unaffected.
+    const lowSun = 1 - palette.sunIntensity;
+    this.hemisphere.intensity = 0.25 + palette.sunIntensity * 0.9 + lowSun * 0.2;
     this.ambient.color.copy(palette.horizon);
-    this.ambient.intensity = 0.12 + palette.sunIntensity * 0.16;
+    this.ambient.intensity = 0.04 + palette.sunIntensity * 0.06 + lowSun * 0.08;
   }
 
   private positionSun(): void {

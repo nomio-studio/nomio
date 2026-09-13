@@ -35,8 +35,8 @@ export const DEFAULT_UI_SETTINGS: UiSettings = {
   reduceMotion: false,
   toneMapping: "agx",
   exposure: 0,
-  contrast: 1.05,
-  saturation: 1.05,
+  contrast: 1.15,
+  saturation: 1.22,
   temperature: 6500,
 };
 

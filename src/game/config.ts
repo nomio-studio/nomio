@@ -81,8 +81,8 @@ export interface LightingConfig {
 
 export const DEFAULT_LIGHTING: LightingConfig = {
   globalIllumination: true,
-  bounceStrength: 0.55,
-  skyBounce: 0.75,
+  bounceStrength: 0.4,
+  skyBounce: 0.6,
 };
 
 /**
@@ -121,12 +121,12 @@ export const DEFAULT_GRADING: GradingConfig = {
   exposure: 0,
   temperature: 6500,
   tint: 0,
-  contrast: 1.05,
-  saturation: 1.05,
-  vibrance: 0.15,
-  highlights: 0,
-  shadows: 0,
-  vignette: 0.12,
+  contrast: 1.15,
+  saturation: 1.22,
+  vibrance: 0.35,
+  highlights: 0.06,
+  shadows: -0.05,
+  vignette: 0.16,
 };
 
 export interface GameConfig {
@@ -177,7 +177,7 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   },
   render: {
     maxPixelRatio: 2,
-    exposure: 1.12,
+    exposure: 1.0,
     shadowChunkRadius: 3,
     meshBudgetMs: 6,
   },
@@ -196,13 +196,13 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
   },
   fog: {
     enabled: true,
-    density: 0.018,
-    start: 90,
+    density: 0.011,
+    start: 130,
     height: 6,
     heightFalloff: 0.05,
     sunStrength: 0.55,
     sunSharpness: 6,
-    mistStrength: 0.3,
+    mistStrength: 0.15,
     mistScale: 0.03,
   },
   lighting: {
