@@ -24,6 +24,9 @@ const AO_SHADE: readonly number[] = [0.72, 0.83, 0.93, 1.0];
 // Baked sky/block light is applied to indirect (ambient) light only, so direct
 // sunlight never goes pitch black; this sets the darkest ambient fraction.
 const AMBIENT_FLOOR = 0.6;
+// Quad corners are emitted in (u, v) parameter order: (0,0), (1,0), (1,1), (0,1).
+const CORNER_U = [0, 1, 1, 0] as const;
+const CORNER_V = [0, 0, 1, 1] as const;
 
 export interface VoxelWorldRendererOptions {
   shadowChunkRadius?: number;
@@ -297,16 +300,36 @@ export class VoxelWorldRenderer {
       normalZ,
     );
 
-    uvs.push(
-      tile.u,
-      tile.v,
-      tile.u + tile.width,
-      tile.v,
-      tile.u + tile.width,
-      tile.v + tile.height,
-      tile.u,
-      tile.v + tile.height,
-    );
+    if (normalY === 0) {
+      // Vertical faces must show the texture upright and unmirrored: its vertical
+      // axis follows world up and its horizontal axis follows the viewer's right.
+      // Which tangent is the vertical one, and whether the horizontal one points
+      // right, depends on the face normal, so derive the corner UVs from the
+      // tangents rather than assuming a fixed order. (For +X and -Z the mesher's
+      // v tangent is horizontal, which otherwise draws the texture sideways.)
+      const uIsVertical = Math.abs(mesh.u[o + 1]) > Math.abs(mesh.v[o + 1]);
+      const vertical = uIsVertical ? CORNER_U : CORNER_V;
+      const horizontal = uIsVertical ? CORNER_V : CORNER_U;
+      const tangentX = uIsVertical ? mesh.v[o] : mesh.u[o];
+      const tangentZ = uIsVertical ? mesh.v[o + 2] : mesh.u[o + 2];
+      // Viewer-right across a vertical face is (normalZ, 0, -normalX).
+      const pointsRight = tangentX * normalZ - tangentZ * normalX > 0;
+      for (let corner = 0; corner < 4; corner += 1) {
+        const s = pointsRight ? horizontal[corner] : 1 - horizontal[corner];
+        uvs.push(tile.u + s * tile.width, tile.v + vertical[corner] * tile.height);
+      }
+    } else {
+      uvs.push(
+        tile.u,
+        tile.v,
+        tile.u + tile.width,
+        tile.v,
+        tile.u + tile.width,
+        tile.v + tile.height,
+        tile.u,
+        tile.v + tile.height,
+      );
+    }
 
     // Per-vertex smooth lighting: AO darkness and propagated light, applied to
     // indirect light in the shader so direct sun stays bright and shadows soften.
