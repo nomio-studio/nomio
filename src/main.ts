@@ -1,5 +1,8 @@
 import "./style.css";
 import { NomioApplication } from "./app/application";
+import { registerServiceWorker } from "./app/pwa";
+
+registerServiceWorker();
 
 const root = document.querySelector<HTMLElement>("#app");
 if (!root) {

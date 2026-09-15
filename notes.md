@@ -270,3 +270,27 @@
 - `npm run test:terrain` verifies 15 terrain invariants. A 225-chunk regional generation sample completed in 278.3 ms (1.24 ms/chunk) while producing every targeted surface/landmark material.
 - Final validation after formatting: typecheck, lint, Prettier, production build, save-system checks, voxel-format benchmark, and terrain suite all pass. The terrain suite measured 1.49 ms/chunk in its final run; the Vite worker bundle is 17.39 kB.
 - A fresh live browser capture had no page or console errors and streamed about 4.82 million terrain blocks. The headless rAF probe is deliberately not treated as a hardware performance result: Chrome reports the `SwiftShader Device (Subzero)` software renderer in this environment.
+
+## PWA implementation baseline
+
+- The app currently has a minimal root `index.html`, a minimal `src/main.ts` bootstrap, and no `public/` asset directory or PWA dependencies.
+- Vite already supports a root-scoped production build, including GitHub Pages base-path handling; the PWA layer should therefore use root-relative public assets and avoid hard-coded source-module URLs.
+- The PWA will cache the built document and same-origin runtime assets on first production launch, serve an offline fallback for navigation, and use a versioned cache for safe updates.
+- The final implementation uses `./` manifest and HTML asset URLs plus `import.meta.env.BASE_URL` service-worker registration, so root hosting and GitHub Pages project paths both resolve correctly.
+- The 512px icon is an isometric cube with lichen top, mineral-blue left, warm-stone right, deep-ink field, and coral structural lines; the 192px export is used for touch icons and both are declared as `any maskable` in the manifest.
+- Final preview verification: manifest 200 with `application/manifest+json`, worker registered and controlling `/`, offline reload 200 with `#app` present, both PNG icons available from cache, and no page errors.
+
+## Monumental terrain baseline
+
+- The current terrain generator has a sound layered structure, but it clamps terrain into a 40-block vertical window (`y=-12..27`), yielding only 24 blocks of validated regional relief.
+- The generator, world index, save voxel dimensions, and meshing derive their vertical extent from `CHUNK_MIN_Y` and `CHUNK_HEIGHT`, so expanding that shared definition is the correct way to create genuinely tall terrain without changing the worker contract.
+- Existing persistence fingerprints include generator configuration but not terrain dimensions; a terrain schema bump is required when the vertical world shape changes.
+- The default forward camera faces north (`-Z`). A deterministic meadow shelf at `(64, -60)` starts around `y=3` and looks toward a 60-block snow range beginning roughly 55 blocks ahead, giving the first view a deliberate monumental composition.
+
+## Monumental terrain implementation
+
+- The vertical chunk window is now `y=-48..63` (112 cells), replacing the former `-12..27` window. This lets the generator use real altitude rather than a visually compressed height range.
+- The height field now combines 92-block domain warping, broad continental plates, wide folded ranges, razor escarpments, sparse summit accents, four-octave foothill noise, tall badland shelves, and deep river cuts.
+- Biome thresholds have been lifted to match the new scale: alpine terrain begins at `y=25` and snow begins at `y=43`, leaving low basins and meadows visually subordinate to the major ranges.
+- Terrain persistence is schema 3, deliberately discarding deltas from the former dimensions and landform shape.
+- Final deterministic test sample: `-32..60` height range, 92 blocks of relief, 2.50 ms/chunk across 225 chunks, all landform/material checks passing. Live capture: `/tmp/nomio-monumental-spawn.png`.

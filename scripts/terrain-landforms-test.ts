@@ -53,11 +53,11 @@ const main = (): void => {
       );
     }
   }
-  check("terrain spans at least 24 vertical blocks", maxHeight - minHeight >= 24);
-  check("terrain includes low basins", minHeight <= 0);
-  check("terrain includes alpine peaks", maxHeight >= 20);
+  check("terrain spans at least 72 vertical blocks", maxHeight - minHeight >= 72);
+  check("terrain includes deep basins", minHeight <= -20);
+  check("terrain includes monumental alpine peaks", maxHeight >= 45);
   check("all six biome families appear in a regional sample", biomes.size === 6);
-  check("adjacent columns stay traversable across chunk edges", maxStep <= 5);
+  check("adjacent columns keep even extreme cliff faces bounded", maxStep <= 20);
 
   console.log("== Surface vocabulary ==");
   const blockCounts = new Uint32Array(BLOCK_TYPE.CRYSTAL + 1);

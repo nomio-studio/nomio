@@ -15,7 +15,7 @@ export const DEFAULT_TERRAIN_CONFIG: TerrainConfig = {
   octaves: 5,
   lacunarity: 2,
   gain: 0.5,
-  baseHeight: 4,
-  heightAmplitude: 8,
+  baseHeight: -18,
+  heightAmplitude: 26,
   viewDistance: 16,
 };

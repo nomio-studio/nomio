@@ -3,8 +3,10 @@ import type { LightingConfig } from "./config";
 import type { TerrainConfig } from "./terrain-config";
 
 export const CHUNK_SIZE = 16;
-export const CHUNK_MIN_Y = -12;
-export const CHUNK_HEIGHT = 40;
+// A tall vertical window gives tectonic ranges room to read from a distance,
+// while still keeping one horizontal chunk as the streaming unit.
+export const CHUNK_MIN_Y = -48;
+export const CHUNK_HEIGHT = 112;
 export const CHUNK_VOLUME = CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT;
 
 export interface ChunkCoordinate {

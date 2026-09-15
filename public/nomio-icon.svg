@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">nomio</title>
+  <rect width="64" height="64" rx="16" fill="#101820"/>
+  <path d="M32 10 54 22.5 32 35 10 22.5Z" fill="#98b27f"/>
+  <path d="M10 22.5 32 35v24L10 46.5Z" fill="#6d97a8"/>
+  <path d="M54 22.5 32 35v24l22-12.5Z" fill="#d6c3a5"/>
+  <path d="m32 35 22-12.5M32 35 10 22.5M32 35v24" fill="none" stroke="#f27b63" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"/>
+  <path d="m32 10 22 12.5v24L32 59 10 46.5v-24Z" fill="none" stroke="#f27b63" stroke-linejoin="round" stroke-width="1.5" opacity=".9"/>
+</svg>

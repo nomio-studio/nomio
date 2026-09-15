@@ -105,3 +105,67 @@ Transform Nomio's procedural terrain into a diverse, striking playable landscape
 ## Status
 
 **Complete** - The terrain upgrade is implemented and verified through deterministic landform tests, full repository checks, worker generation timing, and live-browser visual captures.
+
+---
+
+# Task Plan: concise vector identity and complete PWA support
+
+## Goal
+
+Give Nomio a compact voxel-inspired vector mark and make the production app installable, theme-aware, offline-capable, and pleasant to relaunch from a device home screen.
+
+## Phases
+
+- [x] Phase 1: Audit the app shell and build setup
+- [x] Phase 2: Add the vector icon, manifest, service worker, offline fallback, and registration
+- [x] Phase 3: Verify production build, install metadata, cached reload, and icon rendering
+
+## Decisions Made
+
+- Keep the icon as a dependency-free SVG with an isometric cube silhouette that echoes the game world.
+- Use PNG exports for manifest and Apple touch icons while retaining the SVG as the browser favicon and mask icon.
+- Register the service worker only in production/preview so Vite HMR is never cached during development.
+
+## Verification
+
+- `npm run build`, `npm run typecheck`, `npm run lint`, and `npm run format:check` pass.
+- Preview smoke test confirms manifest MIME/status, service-worker registration and control, 200 offline reload, cached icon responses, and zero page errors.
+- The production bundle retains the existing large Three.js chunk warning; this is unrelated to the PWA layer.
+
+## Status
+
+**Complete** - Nomio has a cohesive vector identity and production-ready, base-path-safe PWA support.
+
+---
+
+# Task Plan: monumental terrain escalation
+
+## Goal
+
+Turn Nomio's world into a huge, high-relief landscape with steep ranges, deep basins, and relentless macro undulation while retaining deterministic generation, safe spawning, and streamable chunk performance.
+
+## Phases
+
+- [x] Phase 1: Audit terrain limits, persistence coupling, and current landform tests
+- [x] Phase 2: Expand the vertical world and rebuild macro terrain signals for extreme relief
+- [x] Phase 3: Tune material/features/spawn for the new scale and invalidate incompatible save deltas
+- [x] Phase 4: Verify deterministic generation, performance, and live visual impact
+
+## Decisions Made
+
+- Increase the vertical terrain window rather than compressing a taller silhouette into the former 40-block limit.
+- Favor wide tectonic landforms, cliffs, cirques, and deep cuts over noisy single-block spikes.
+- Preserve deterministic, coordinate-only generation so worker streaming and persistence continue to function.
+
+## Status
+
+## Verification
+
+- Terrain diagnostics measure a 92-block regional elevation span (`-32` to `60`) and retain all six biome families.
+- The 225-chunk terrain generation sample completed in 563.5 ms (2.50 ms/chunk), under the 3 ms budget.
+- A live browser capture confirms the opening meadow faces a mountain wall with steep terraces, giant snow-capped forms, and no page errors.
+- `npm run build`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run test:terrain`, and `npm run test:saves` pass.
+
+## Status
+
+**Complete** - The terrain now uses a much larger vertical world and an aggressively folded macro landscape designed for immediate visual impact.

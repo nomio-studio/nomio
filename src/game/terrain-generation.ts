@@ -25,8 +25,8 @@ export interface TerrainColumn {
   mountain: number;
 }
 
-const MIN_SURFACE_Y = CHUNK_MIN_Y + 2;
-// Leave two clear cells at the top of the vertical window for landmark caps.
+const MIN_SURFACE_Y = CHUNK_MIN_Y + 3;
+// Leave clear cells at the top of the vertical window for landmark caps.
 const MAX_SURFACE_Y = CHUNK_MIN_Y + CHUNK_HEIGHT - 4;
 const TREE_CELL_SIZE = 7;
 const CRYSTAL_CELL_SIZE = 23;
@@ -99,9 +99,9 @@ export const sampleFbm = (
   );
 
 /**
- * Samples the landscape as a coordinate-only function. Warped continents set
- * the silhouette, folded ridges make mountain chains, dry fields flatten into
- * terraced badlands, and a narrow field cuts riverbeds through the result.
+ * Samples the landscape as a coordinate-only function. Broad tectonic plates
+ * establish a huge silhouette, folded ranges and cliffs make it legible from
+ * afar, and deep rivers cut through the result at playable scales.
  */
 export const sampleTerrainColumn = (
   noise: OpenSimplex2,
@@ -109,8 +109,8 @@ export const sampleTerrainColumn = (
   worldZ: number,
   config: TerrainConfig,
 ): TerrainColumn => {
-  const macroFrequency = Math.max(0.0018, config.frequency * 0.14);
-  const detailFrequency = Math.max(0.009, config.frequency * 0.82);
+  const macroFrequency = Math.max(0.0009, config.frequency * 0.055);
+  const detailFrequency = Math.max(0.005, config.frequency * 0.43);
 
   // Domain warping breaks up the axial look that simple height fields produce.
   const warpX = noise.noise2(
@@ -121,16 +121,22 @@ export const sampleTerrainColumn = (
     (worldX - 491.1) * macroFrequency * 2.15,
     (worldZ + 87.9) * macroFrequency * 2.15,
   );
-  const x = worldX + warpX * 26;
-  const z = worldZ + warpZ * 26;
+  const x = worldX + warpX * 92;
+  const z = worldZ + warpZ * 92;
 
-  const continental = sampleLayer(noise, x, z, macroFrequency, 2, 2.05, 0.52);
-  const land = smoothstep(-0.48, 0.3, continental);
-  const rolling = sampleLayer(noise, x, z, detailFrequency, 3, 2.03, 0.5);
+  const continental = sampleLayer(noise, x, z, macroFrequency, 3, 2.03, 0.53);
+  const land = smoothstep(-0.44, 0.22, continental);
+  const rolling = sampleLayer(noise, x, z, detailFrequency, 4, 2.05, 0.51);
   const rangeSignal =
-    (noise.noise2(x * macroFrequency * 2.4 + 71.2, z * macroFrequency * 2.4) + 1) * 0.5;
+    (noise.noise2(x * macroFrequency * 2.15 + 71.2, z * macroFrequency * 2.15) + 1) * 0.5;
   const foldedRidge = ridge(
-    noise.noise2(x * detailFrequency * 0.46 - 39.4, z * detailFrequency * 0.46 + 154.6),
+    noise.noise2(x * detailFrequency * 0.29 - 39.4, z * detailFrequency * 0.29 + 154.6),
+  );
+  const escarpment = ridge(
+    noise.noise2(x * macroFrequency * 5.2 + 332.8, z * macroFrequency * 5.2 - 119.1),
+  );
+  const summit = ridge(
+    noise.noise2(x * detailFrequency * 0.17 - 825.4, z * detailFrequency * 0.17 + 617.2),
   );
   const temperature =
     (noise.noise2(x * macroFrequency * 1.55 + 912.8, z * macroFrequency * 1.55 - 504.2) + 1) * 0.5;
@@ -140,35 +146,39 @@ export const sampleTerrainColumn = (
   const river =
     1 -
     smoothstep(
-      0.025,
-      0.17,
-      Math.abs(noise.noise2(x * macroFrequency * 4.1 + 104.7, z * macroFrequency * 4.1 - 318.8)),
+      0.018,
+      0.1,
+      Math.abs(noise.noise2(x * macroFrequency * 5.6 + 104.7, z * macroFrequency * 5.6 - 318.8)),
     );
 
-  const mountains = land * smoothstep(0.44, 0.74, rangeSignal);
-  const badlands = land * smoothstep(0.54, 0.78, dryness) * smoothstep(0.26, 0.76, rangeSignal);
+  const mountains = land * smoothstep(0.36, 0.64, rangeSignal);
+  const badlands = land * smoothstep(0.53, 0.77, dryness) * smoothstep(0.22, 0.72, rangeSignal);
   const amplitude = config.heightAmplitude;
-  const lowlands = config.baseHeight - 4 + land * (amplitude + 5);
-  const foothills = rolling * (1.9 + amplitude * 0.34) * (0.45 + land * 0.55);
+  const lowlands = config.baseHeight - 10 + land * (amplitude + 15);
+  const foothills = rolling * (5 + amplitude * 0.62) * (0.32 + land * 0.68);
   const mountainHeight =
-    mountains * (Math.pow(foldedRidge, 2.7) * (amplitude * 1.7 + 6.5) + rangeSignal * 2.4);
-  const mesaHeight = badlands * (4.4 + Math.max(0, rolling) * 4.2);
-  const riverCut = river * land * (1.8 + mountains * 3.2);
+    mountains *
+    (Math.pow(foldedRidge, 3.2) * (amplitude * 2.05 + 18) +
+      Math.pow(escarpment, 5.5) * (amplitude * 0.78 + 8) +
+      Math.pow(summit, 8) * 17 +
+      rangeSignal * 5);
+  const mesaHeight = badlands * (9 + Math.max(0, rolling) * 10 + Math.pow(escarpment, 5) * 9);
+  const riverCut = river * land * (7 + mountains * 13 + Math.max(0, rolling) * 4);
 
   let height = lowlands + foothills + mountainHeight + mesaHeight - riverCut;
   // Dry plateaus resolve into deliberate shelves while the rest stays naturally folded.
   if (badlands > 0.18) {
-    const terrace = Math.floor(height / 3) * 3 + 1.3;
-    height = lerp(height, terrace, smoothstep(0.18, 0.78, badlands) * 0.72);
+    const terrace = Math.floor(height / 4) * 4 + 1.5;
+    height = lerp(height, terrace, smoothstep(0.18, 0.78, badlands) * 0.78);
   }
 
   const surfaceY = Math.floor(clamp(height, MIN_SURFACE_Y, MAX_SURFACE_Y));
   let biome: TerrainBiome;
-  if (land < 0.28 || (river > 0.72 && surfaceY < 8)) {
+  if (land < 0.28 || (river > 0.72 && surfaceY < -4)) {
     biome = "basin";
-  } else if (surfaceY >= 19 || (surfaceY >= 15 && temperature < 0.31)) {
+  } else if (surfaceY >= 43 || (surfaceY >= 32 && temperature < 0.31)) {
     biome = "snow";
-  } else if (surfaceY >= 14 || mountains > 0.52) {
+  } else if (surfaceY >= 25 || mountains > 0.48) {
     biome = "alpine";
   } else if (badlands > 0.34) {
     biome = "badlands";

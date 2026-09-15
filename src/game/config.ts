@@ -177,10 +177,9 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
     lookSensitivity: 0.003,
     autoJump: true,
     stepHeight: 1,
-    // A meadow shelf facing the first mountain fold; high enough to clear any
-    // deterministic landmark while physics settles the player onto the ground.
-    spawn: [-5.5, 26, -6.5],
-    fallResetY: -24,
+    // A calm meadow shelf looking north into an 80-block alpine wall.
+    spawn: [64.5, 5, -60.5],
+    fallResetY: -60,
   },
   interaction: {
     maxDistance: 7,
