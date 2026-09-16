@@ -1,6 +1,6 @@
-# nomio
+# Nomio
 
-`nomio` is a small browser-based voxel garden built with Three.js, TypeScript, HTML, and CSS. The MVP is intentionally compact: step into an endless island, walk in any direction while the world streams around you, mine blocks, place new blocks, and reset the world whenever you want a clean canvas.
+`Nomio` is a small browser-based voxel garden built with Three.js, TypeScript, HTML, and CSS. The MVP is intentionally compact: step into an endless island, walk in any direction while the world streams around you, mine blocks, place new blocks, and reset the world whenever you want a clean canvas.
 
 ## Run it
 
@@ -26,7 +26,7 @@ npm run test:saves
 
 ## Deploy
 
-Pushes to `main` build and publish the game to GitHub Pages through `.github/workflows/deploy.yml`, served from `https://nomio-studio.github.io/nomio/`. The workflow runs `npm ci` and `npm run build`, uploads `dist`, and deploys it with the Pages Actions. `vite.config.ts` sets the `/nomio/` base path from `GITHUB_REPOSITORY` during an Actions build, so the local dev server keeps serving from `/`.
+Pushes to `main` build and publish the game to GitHub Pages through `.github/workflows/ci-cd.yml`, served from `https://nomio-studio.github.io/nomio/`. The workflow runs the full validation suite, uploads `dist`, and deploys it with the Pages Actions. `vite.config.ts` sets the `/nomio/` base path from `GITHUB_REPOSITORY` during an Actions build, so the local dev server keeps serving from `/`.
 
 ## Controls
 

@@ -15,12 +15,11 @@ export class LoadingScreen {
     options.container.insertAdjacentHTML(
       "beforeend",
       `
-      <section class="screen screen--loading" id="screen-loading" aria-label="Loading nomio">
+      <section class="screen screen--loading" id="screen-loading" aria-label="Loading Nomio">
         <div class="screen__inner loading">
           <div class="brand brand--stacked">
-            <span class="brand__spark" aria-hidden="true">✦</span>
             <p class="eyebrow">A pocket-sized world</p>
-            <p class="brand__title">nomio</p>
+            <p class="brand__title">Nomio</p>
           </div>
           <div class="loading__bar" role="progressbar" aria-label="Generating terrain"
             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loading-progress">

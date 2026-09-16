@@ -135,14 +135,6 @@ kbd {
   text-align: center;
 }
 
-.brand__spark {
-  display: block;
-  color: var(--color-accent);
-  font-size: 18px;
-  line-height: 1;
-  transform: rotate(14deg);
-}
-
 .brand__title {
   margin: 0;
   color: var(--color-text);

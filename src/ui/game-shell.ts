@@ -13,7 +13,7 @@ const requireElement = <T extends Element>(root: ParentNode, selector: string): 
 
 export const createGameShell = (root: HTMLElement): GameShell => {
   root.innerHTML = `
-    <canvas id="game-canvas" aria-label="nomio voxel garden"></canvas>
+    <canvas id="game-canvas" aria-label="Nomio voxel garden"></canvas>
     <div id="ui"></div>
   `;
 

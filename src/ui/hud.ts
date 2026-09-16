@@ -62,11 +62,10 @@ export class Hud {
       <div class="hud" id="hud" hidden>
         <div class="hud__vignette" aria-hidden="true"></div>
 
-        <header class="brand" aria-label="nomio">
-          <span class="brand__spark" aria-hidden="true">✦</span>
+        <header class="brand" aria-label="Nomio">
           <div>
             <p class="eyebrow">Field note 01</p>
-            <p class="brand__title">nomio</p>
+            <p class="brand__title">Nomio</p>
           </div>
         </header>
 

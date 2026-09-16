@@ -14,7 +14,7 @@ export function registerServiceWorker(): void {
           void registration.update();
         })
         .catch((error: unknown) => {
-          console.warn("nomio offline support could not start", error);
+          console.warn("Nomio offline support could not start", error);
         });
     },
     { once: true },

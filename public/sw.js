@@ -1,4 +1,4 @@
-const CACHE_NAME = "nomio-shell-v1";
+const CACHE_NAME = "nomio-shell-v2";
 const BASE_PATH = new URL("./", self.location.href).pathname;
 const asset = (path) => `${BASE_PATH}${path}`;
 const PRECACHE_URLS = [
